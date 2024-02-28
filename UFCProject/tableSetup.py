@@ -2,42 +2,9 @@ import requests
 import mysql.connector
 from bs4 import BeautifulSoup
 from sqlConfig import loginConfig
-
-"""
-This method visits the ufc stats fighters page and grabs the first name, last name, and fighter page url for every zuffa fighter
-storing it in a list of tuples
-"""
-def hyperLinkGrabber(lastNameLetter):
-    # Make a request to the website and parse html content
-    url = f"http://www.ufcstats.com/statistics/fighters?char={lastNameLetter}&page=all"
-    response = requests.get(url)
-    soup = BeautifulSoup(response.content, 'html.parser')
-
-    # navigate to the fighter table and extract all rows
-    table = soup.find_all('table')[0] 
-    rows = table.find_all('tr')
-
-    tmpList = []
-    # Loop through the rows
-    for row in rows:
-        cells = row.find_all('td')
-        if len(cells) >= 2:
-            firstCell = cells[0]
-            secondCell = cells[1]
-    
-            firstNameLink = firstCell.find('a')
-            lastNameLink = secondCell.find('a')
-            firstNameHyperLink = firstNameLink.get('href')
-            firstNameText = firstNameLink.text
-            lastNameText = lastNameLink.text
-            tmpTuple = (firstNameText, lastNameText, firstNameHyperLink)
-            tmpList.append(tmpTuple)
-    return(tmpList)
-
-#This grabs the fighter detail links for every single fighter on the ufc stats page as its paginated by the first letter of the last name
-lastNameLetters = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z']
-allZuffaFighters = [hyperLinkGrabber(lastNameLetter) for lastNameLetter in lastNameLetters]
-allZuffaFighters = [fighter for subList in allZuffaFighters for fighter in subList]
+import tableSetUpMethods as tsum
+import time
+from concurrent.futures import ThreadPoolExecutor
 
 cnx = mysql.connector.connect(
     user=loginConfig['user'],
@@ -47,7 +14,22 @@ cnx = mysql.connector.connect(
 )
 cursor = cnx.cursor()
 
-#sets up the fighterHyperLink table 
+"""
+This code block is dedicated to setting up the fighterHyperLink table. It contains all the fighters personal stats as well as the hyperlink we grabbed it from
+"""
+#This grabs the fighter detail links for every single fighter on the ufc stats page as its paginated by the first letter of the last name
+lastNameLetters = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z']
+with ThreadPoolExecutor(5) as executor:
+    allZuffaFighters = list(executor.map(tsum.hyperLinkGrabber, lastNameLetters))
+
+allZuffaFighters = [fighter for subList in allZuffaFighters for fighter in subList]
+
+with ThreadPoolExecutor(5) as executor:
+    allFighterStats = list(executor.map(tsum.fighterStatGrabber, allZuffaFighters))
+
+allZuffaFighters = pd.DataFrame(allFighterStats)
+allZuffaFighters = allZuffaFighters.drop('', axis=1)
+
 cursor.execute("DROP TABLE IF EXISTS fighterHyperlinks")
 cursor.execute("""
     CREATE TABLE fighterHyperlinks (
@@ -55,14 +37,50 @@ cursor.execute("""
         firstName VARCHAR(255),
         lastName VARCHAR(255),
         hyperlink VARCHAR(255),
+        Height VARCHAR(255),
+        Weight VARCHAR(255),
+        Reach VARCHAR(255),
+        Stance VARCHAR(255),
+        DOB VARCHAR(255),
+        Strikes_Landed_Per_Minute DECIMAL(4, 2),
+        Strike_Accuracy VARCHAR(255),
+        Strikes_Absorbed_Per_Minute DECIMAL(4, 2),
+        Strike_Defense VARCHAR(255),
+        Takedown_Average DECIMAL(4, 2),
+        Takedown_Accuracy VARCHAR(255),
+        Takedown_Defense VARCHAR(255),
+        Submission_Average DECIMAL(4, 2),
         PRIMARY KEY (fighterID)
     )
 """)
 
-query = "INSERT INTO fighterHyperlinks (firstName, lastName, hyperlink) VALUES (%s, %s, %s)"
+# Insert the data
+query = "INSERT INTO fighterHyperlinks (firstName, lastName, hyperlink, Height, Weight, Reach, Stance, DOB, Strikes_Landed_Per_Minute, Strike_Accuracy, Strikes_Absorbed_Per_Minute, Strike_Defense, Takedown_Average, Takedown_Accuracy, Takedown_Defense, Submission_Average) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
+allZuffaFightersList = allZuffaFighters.to_records(index=False).tolist()
+cursor.executemany(query, allZuffaFightersList)
+cnx.commit()
+
+"""
+This block of code is dedicated to building the events table
+"""
+eventList = tsum.ufcEventGrabber()
+cursor.execute("DROP TABLE IF EXISTS eventHyperlinks")
+cursor.execute("""
+    CREATE TABLE eventHyperlinks (
+        eventID INT AUTO_INCREMENT,
+        eventName VARCHAR(255),
+        eventDate VARCHAR(255),
+        eventLocation VARCHAR(255),
+        eventHyperLink VARCHAR(255),
+        PRIMARY KEY (eventID)
+    )
+""")
 
 # Insert the data
-cursor.executemany(query, allZuffaFighters)
+query = "INSERT INTO eventHyperlinks (eventName, eventDate, eventLocation, eventHyperLink) VALUES (%s, %s, %s, %s)"
+cursor.executemany(query, eventList)
 cnx.commit()
+
+#close out
 cursor.close()
 cnx.close()
