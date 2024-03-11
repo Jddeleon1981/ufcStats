@@ -81,6 +81,64 @@ query = "INSERT INTO eventHyperlinks (eventName, eventDate, eventLocation, event
 cursor.executemany(query, eventList)
 cnx.commit()
 
+
+"""
+This code block is dedicated to setting up the fightStats table. It contains fight stats for events starting from the 2000s since thats when the unified rule
+set was established
+"""
+with ThreadPoolExecutor(10) as executor:
+    winnerGrabber = list(executor.map(tsum.fightStatGrabberA, eventHyperLinks))
+winnerGrabber = [event for subList in winnerGrabber for event in subList]
+
+with ThreadPoolExecutor(10) as executor:
+    allFighterStats = list(executor.map(tsum.fightStatGrabberB, winnerGrabber))
+allFighterStats = [event for subList in allFighterStats for event in subList]
+
+allFighterStatsDF = pd.DataFrame(allFighterStats, columns=['fighter_A', 'fighter_B', 'fighter_A_KD', 'fighter_B_KD', 'fighter_a_sig_strikes', 'fighter_b_sig_strikes', 'fighter_a_sig_strike_acc', 'fighter_b_sig_strike_acc', 'fighter_a_total_strikes', 'fighter_b_total_strikes', 'fighter_a_takedowns', 'fighter_b_takedowns', 'fighter_a_takedown_acc', 'fighter_b_takedown_acc', 'fighter_a_sub_attempts', 'fighter_b_sub_attempts', 'fighter_a_reversal', 'fighter_b_reversal', 'fighter_a_control_time', 'fighter_b_control_time', 'weight_class', 'winner', 'fightURL', 'eventID', 'event', 'date', 'location'])
+allFighterStatsDF['date'] = allFighterStatsDF['date'].astype(str)
+
+cursor.execute("DROP TABLE IF EXISTS fightStats")
+cursor.execute("""
+    CREATE TABLE fightStats (
+        fightID INT AUTO_INCREMENT,
+        fighterA VARCHAR(255),
+        fighterB VARCHAR(255),
+        fighter_A_KD VARCHAR(255),
+        fighter_B_KD VARCHAR(255),
+        fighter_a_sig_strikes VARCHAR(255),
+        fighter_b_sig_strikes VARCHAR(255),
+        fighter_a_sig_strike_acc VARCHAR(255),
+        fighter_b_sig_strike_acc VARCHAR(255),
+        fighter_a_total_strikes VARCHAR(255),
+        fighter_b_total_strikes VARCHAR(255),
+        fighter_a_takedowns VARCHAR(255),
+        fighter_b_takedowns VARCHAR(255),
+        fighter_a_takedown_acc VARCHAR(255),
+        fighter_b_takedown_acc VARCHAR(255),
+        fighter_a_sub_attempts VARCHAR(255),
+        fighter_b_sub_attempts VARCHAR(255),
+        fighter_a_reversal VARCHAR(255),
+        fighter_b_reversal VARCHAR(255),
+        fighter_a_control_time VARCHAR(255),
+        fighter_b_control_time VARCHAR(255),
+        weight_class VARCHAR(255),
+        winner VARCHAR(255),
+        fightURL VARCHAR(255),
+        eventID INT,
+        event VARCHAR(255),
+        date VARCHAR(255),
+        location VARCHAR(255),
+        PRIMARY KEY (fightID),
+        FOREIGN KEY (eventID) REFERENCES eventHyperlinks(eventID)
+    )
+""")
+
+# Insert the data
+query = "INSERT INTO fightStats (fighterA, fighterB, fighter_A_KD, fighter_B_KD, fighter_a_sig_strikes, fighter_b_sig_strikes, fighter_a_sig_strike_acc, fighter_b_sig_strike_acc, fighter_a_total_strikes, fighter_b_total_strikes, fighter_a_takedowns, fighter_b_takedowns, fighter_a_takedown_acc, fighter_b_takedown_acc, fighter_a_sub_attempts, fighter_b_sub_attempts, fighter_a_reversal, fighter_b_reversal, fighter_a_control_time, fighter_b_control_time, weight_class, winner, fightURL, eventID, event, date, location) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
+allFighterStatsList = allFighterStatsDF.to_records(index=False).tolist()
+cursor.executemany(query, allFighterStatsList)
+cnx.commit()
+
 #close out
 cursor.close()
 cnx.close()

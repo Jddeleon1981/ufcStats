@@ -102,3 +102,79 @@ def ufcEventGrabber():
             tmpTuple = (eventName, eventDate, eventLocation, eventLink)
             tmpList.append(tmpTuple)
     return(tmpList)
+
+"""
+We had to split the original method in half because it was to intensive and things were getting lost in the middle. Now the first half
+is dedicated to taking in a event row from our eventHyperLinks table and vising the page related to that row. From there its going to scrape all
+the fights that occurred at this event as well as the winner of that individual fight. This will all be returned in a list of tuples that where each 
+individual tuple will represent a fight on the card and will contain things like the winner, link, eventID, eventName, eventDate, eventLocation
+"""
+def fightStatGrabberA(event):
+    time.sleep(1)
+    eventID = event[0]
+    eventName = event[1]
+    eventDate = event[2]
+    eventLocation = event[3]
+    eventURL = event[4]
+    response = requests.get(eventURL)
+    soup = BeautifulSoup(response.content, 'html.parser')
+    
+    #grab main fights table
+    tables = soup.find_all('table')
+    if not tables:
+        print(f"This {eventName} didnt have a table to grab. This was the link {eventURL}")
+        return [f"This {eventName} didnt have a table to grab. This was the link {eventURL}"]
+    table = tables[0]
+    rows = table.find_all('tr')
+    
+    #grab all onClick links in the fighter table
+    fightLinks = []
+    winners = []
+    for row in rows:
+        onclick = row.get('onclick')
+        if onclick:
+            fightLinks.append(onclick)
+    
+        #want to find the winner from this table and store for later
+        winner_tag = row.find('a', class_='b-link b-link_style_black')
+        header_tag = row.find('th')
+        if winner_tag and not header_tag:  # Check if the tag exists before calling get_text()
+            winner = winner_tag.get_text().strip()
+            winners.append(winner)
+
+    #pair
+    fightLinks = [fight.split("'")[1] for fight in fightLinks]
+    winnerAndLink = list(zip(winners, fightLinks))
+    eventStats = [(winner, link, eventID, eventName, eventDate, eventLocation) for winner, link in winnerAndLink]
+    return(eventStats)
+
+"""
+This is the second part of the original fightStatGrabber method. This is meant to act upon the tuples that are produced by part A.
+Its going to take in a tuple labeled eventStats that contains the following information in this exact order:
+winner, link, eventID, eventName, eventDate, eventLocation
+We're going to grab the link to visit the individual fight page and try to find the top table pertaining to 'Totals' and scrape all of that 
+information.
+"""
+def fightStatGrabberB(eventStats):
+    fightStats = []   
+    fightLink = eventStats[1]
+    time.sleep(1)
+    response = requests.get(fightLink)
+    soup = BeautifulSoup(response.content, 'html.parser')
+        
+    tables = soup.find_all('table')
+    if tables:
+        table = tables[0] 
+        stats = table.find_all('p', class_='b-fight-details__table-text')
+        currFight = [p.get_text(strip=True) for p in stats]
+
+        #also add in weight class
+        weightClass = soup.find("i", class_="b-fight-details__fight-title").get_text(strip=True)
+        weight = weightClass.split()[0]
+        currFight.append(weight)
+        
+        currFight.extend(list(eventStats))
+        fightStats.append(currFight)
+    else:
+        return []
+    return(fightStats)
