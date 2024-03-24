@@ -5,22 +5,13 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from sqlConfig import loginConfig
 
-
-cnx = mysql.connector.connect(
-    user=loginConfig['user'],
-    password=loginConfig['password'],
-    host=loginConfig['host'],
-    database=loginConfig['database']
-)
-cursor = cnx.cursor()
-
 """
 We use this method to query the fighterHyperLinks table and grab the fighterID for the fighter we're currently working with so that we can add it to its corresponding row when building the fighterStats table
 
 PARAMETER
 link - A string representing the link to a fighter page. This is the fighter we want to grab the fighterID for
 """
-def fighterIDGrabber(link):
+def fighterIDGrabber(link, cursor):
     query = f"""
     select fighterID
     FROM fighterHyperlinks
@@ -145,7 +136,7 @@ def ufcEventGrabber():
 We had to split the original method in half because it was to intensive and things were getting lost in the middle. Now the first half
 is dedicated to taking in a event row from our eventHyperLinks table and vising the page related to that row. From there its going to scrape all
 the fights that occurred at this event as well as the winner of that individual fight. This will all be returned in a list of tuples that where each 
-individual tuple will represent a fight on the card and will contain things like the winner, link, andeventID.
+individual tuple will represent a fight on the card and will contain things like the winner, link, and eventID.
 
 PARAMETERS
 event - A tuple representing a row from the eventHyperlinks table
@@ -171,7 +162,10 @@ def fightStatGrabberA(event):
     #grab all onClick links in the fighter table, which represent pages for each individual fight that we can look at
     fightLinks = []
     winners = []
+    weightClasses = []
     for row in rows:
+
+        #checks to see if theres a hyperlink thats activiated on click and if so add to our fightLinks list
         onclick = row.get('onclick')
         if onclick:
             fightLinks.append(onclick)
@@ -183,26 +177,43 @@ def fightStatGrabberA(event):
             winner = winner_tag.get_text().strip()
             winners.append(winner)
 
+        #want to grab the weight class and store for later, stored in this kind of class but there multiple columns with this name. Grab the 2nd occurence
+        weightClass_tags = row.find_all('td', class_='b-fight-details__table-col l-page_align_left')
+        if weightClass_tags and len(weightClass_tags) > 1:  
+            weightClass_tag = weightClass_tags[1] 
+            weightClass_text = weightClass_tag.find('p', class_='b-fight-details__table-text').get_text().strip()
+            weightClasses.append(weightClass_text)
+            
     #pair the eventID with the winners and fight links for all fights that occured at this event
     fightLinks = [fight.split("'")[1] for fight in fightLinks]
-    winnerAndLink = list(zip(winners, fightLinks))
-    eventStats = [(winner, link, eventID) for winner, link in winnerAndLink]
+    winnerAndLink = list(zip(winners, weightClasses, fightLinks))
+    eventStats = [(winner, weightClass, link, eventID) for winner, weightClass, link in winnerAndLink]
     return(eventStats)
 
 """
 This is the second part of the original fightStatGrabber method. This is meant to act upon the tuples that are produced by part A.
 Its going to take in a tuple labeled eventStats that contains the following information in this exact order:
-winner, link, eventID
+winner, weightClass, link, eventID
 We're going to grab the link to visit the individual fight page and try to find the top table pertaining to 'Totals' and scrape all of that 
 information.
 
 PARAMETER
-eventStats - a tuple containing the winner, fight link, and eventID for a particular fight in the UFC
+eventStats - a tuple containing the winner, weightClass, fight link, and eventID for a particular fight in the UFC
 """
 def fightStatGrabberB(eventStats):
+
+    cnx = mysql.connector.connect(
+        user=loginConfig['user'],
+        password=loginConfig['password'],
+        host=loginConfig['host'],
+        database=loginConfig['database']
+    )
+    cursor = cnx.cursor()
+
+    print(f'started fightStats for {eventStats[0]} at the event with the following eventID:{eventStats[3]}')
     time.sleep(1)
     fightStats = []   
-    fightLink = eventStats[1]
+    fightLink = eventStats[2]
     
     #navigate to the page for this fight
     response = requests.get(fightLink)
@@ -216,16 +227,11 @@ def fightStatGrabberB(eventStats):
         stats = table.find_all('p', class_='b-fight-details__table-text')
         currFight = [p.get_text(strip=True) for p in stats]
 
-        #grab string representation of the weight class they foguht in
-        weightClass = soup.find("i", class_="b-fight-details__fight-title").get_text(strip=True)
-        weight = weightClass.split()[0]
-        currFight.append(weight)
-
         #also grab fighterHyperLinks so we can grab their fighterIDs from the fighterHyperLinks table
         hyperLinks = table.find_all('a', class_='b-link b-link_style_black')
         hyperLinks = [link['href'] for link in hyperLinks]
         hyperLinks = add_www_to_links(hyperLinks)
-        fighterIDs = [fighterIDGrabber(hyperLink) for hyperLink in hyperLinks]
+        fighterIDs = [fighterIDGrabber(hyperLink, cursor) for hyperLink in hyperLinks]
 
         #add fighterIDs, winner, eventID, and fightLink to our current list
         currFight.extend(fighterIDs)
@@ -233,5 +239,7 @@ def fightStatGrabberB(eventStats):
         fightStats.append(currFight)
     else:
         return []
-    print(f'finished fightStats for {eventStats[0]} at the event with the following eventID:{eventStats[2]}')
+    
+    cursor.close()
+    cnx.close()
     return(fightStats)
