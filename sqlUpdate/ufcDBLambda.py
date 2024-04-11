@@ -1,7 +1,6 @@
 import requests
 import mysql.connector
 from bs4 import BeautifulSoup
-from sqlUpdate.sqlConfig import loginConfig
 import time
 import pandas as pd
 from datetime import datetime
@@ -238,11 +237,12 @@ eventStats - a tuple containing the winner, weightClass, fight link, and eventID
 """
 def fightStatGrabberB(eventStats):
 
+    dbCredentials = getSecret()
     cnx = mysql.connector.connect(
-        user=loginConfig['user'],
-        password=loginConfig['password'],
-        host=loginConfig['host'],
-        database=loginConfig['database']
+        user=dbCredentials['username'],
+        password=dbCredentials['password'],
+        host=dbCredentials['host'],
+        database=dbCredentials['dbname']
     )
     cursor = cnx.cursor()
 
@@ -283,7 +283,7 @@ def fightStatGrabberB(eventStats):
 """
 Using AWS secret manager retrieve the db credentials for our mysql ufc db
 """
-def get_secret():
+def getSecret():
 
     secret_name = "ufcStats-db-credentials"
     region_name = "us-west-1"
@@ -305,163 +305,179 @@ def get_secret():
     secret = get_secret_value_response['SecretString']
     return json.loads(secret)
 
-#grab credientals and connect to db
-dbCredentials = get_secret()
-cnx = mysql.connector.connect(
-    user=dbCredentials['username'],
-    password=dbCredentials['password'],
-    host=dbCredentials['host'],
-    database=dbCredentials['dbname']
-)
-cursor = cnx.cursor()
 
 ###
-#This snippet is dedicated to updating the eventHyperLinks table
+#MAIN
 ###
+def lambda_handler(event, context):
 
-#grab events table and store into a df
-query = f"""
-    select *
-    FROM eventHyperlinks
-    """
-cursor.execute(query)
-eventData = cursor.fetchall()
-eventDataDF = pd.DataFrame(eventData, columns=['eventID', 'eventName', 'eventDate', 'eventLocation', 'eventURL'])
+    #grab credientals and connect to db
+    dbCredentials = getSecret()
+    cnx = mysql.connector.connect(
+        user=dbCredentials['username'],
+        password=dbCredentials['password'],
+        host=dbCredentials['host'],
+        database=dbCredentials['dbname']
+    )
+    cursor = cnx.cursor()
 
-# Get the row with the latest date so we can see if theres a event we havent added yet
-latestEvent = eventDataDF.loc[pd.to_datetime(eventDataDF['eventDate']).idxmax()]
+    ###
+    #This snippet is dedicated to updating the eventHyperLinks table
+    ###
 
-#grab current time for comparison purposes against latest event stored in the db
-currentTime = datetime.now()
-latestStoredEventTime = pd.to_datetime(latestEvent['eventDate'])
-newEvents = ufcEventGrabber(currentTime, latestStoredEventTime)
-
-#if newEvents is empty a new event hasnt happened yet, exit with a 0
-if not newEvents:
-    print("No deteced new events to update our db with")
-    exit(0)
-
-#update the eventHyperLinks page
-query = "INSERT INTO eventHyperlinks (eventName, eventDate, eventLocation, eventHyperLink) VALUES (%s, %s, %s, %s)"
-cursor.executemany(query, newEvents)
-cnx.commit()
-print("Finished updating the eventHyperLinks table")
-
-
-###
-#This code block updates the fighterHyperLink page
-###
-
-Event = namedtuple('Event', ['eventName', 'eventDate', 'eventLocation', 'eventURL'])
-for event in newEvents:
-    eventTuple = Event(*event)
+    #grab events table and store into a df
     query = f"""
-        SELECT *
+        select *
         FROM eventHyperlinks
-        WHERE
-            eventName = '{eventTuple.eventName}' and eventDate = '{eventTuple.eventDate}' and eventHyperLink = '{eventTuple.eventURL}' 
         """
-cursor.execute(query)
-eventData = cursor.fetchall()
+    cursor.execute(query)
+    eventData = cursor.fetchall()
+    eventDataDF = pd.DataFrame(eventData, columns=['eventID', 'eventName', 'eventDate', 'eventLocation', 'eventURL'])
 
-# scrape fighter links so we can see if we have stored in fighterHyperLinks, store in flattened list of tuples
-fighterData = [data for sublist in (scrape_fighter_data(str(event[4])) for event in eventData) for data in sublist]
+    # Get the row with the latest date so we can see if theres a event we havent added yet
+    latestEvent = eventDataDF.loc[pd.to_datetime(eventDataDF['eventDate']).idxmax()]
 
-#seperate so we can add www to links before coupling as tuples again
-fighterNames, fighterURLs = zip(*fighterData)  
-updatedURLs = add_www_to_links(fighterURLs)  
-fighterLinks = list(zip(fighterNames, updatedURLs))
+    #grab current time for comparison purposes against latest event stored in the db
+    currentTime = datetime.now()
+    latestStoredEventTime = pd.to_datetime(latestEvent['eventDate'])
+    newEvents = ufcEventGrabber(currentTime, latestStoredEventTime)
 
-#fighterLinks now contains the unique links for each fighter, if our db doesnt have yet we need to update with the newly added fighter
-#this should be changed such that if it doesnt fail we update with the newest info
-newFighters = []
-for elem in fighterLinks:
-    try:
-        #gather first, last name, and url for current fighter and store as three part tuple
-        nameParts = elem[0].strip().split(' ', 1)
-        firstName = nameParts[0]
-        lastName = nameParts[1] if len(nameParts) > 1 else ''
-        url = elem[1]
-        fighterTuple = (firstName, lastName, url)
+    #if newEvents is empty a new event hasnt happened yet, exit with a 0
+    if not newEvents:
+        print("No deteced new events to update our db with")
+        return {
+            'statusCode': 200,
+            'body': json.dumps('No new events detected')
+        }
 
-        #if fighter already in db then we need to update stats with latest information
-        fighterID = fighterIDGrabber(url, cursor)
-        fighterTuple = (firstName, lastName, url)
-        updatedStats = (fighterStatGrabber(fighterTuple))
-        updatedStats.pop('', None) #remove empty key that is added
-
-        #update db for our current fighter
-        query = """
-        UPDATE fighterHyperlinks 
-        SET 
-            firstName = %s, 
-            lastName = %s, 
-            hyperlink = %s, 
-            Height = %s, 
-            Weight = %s, 
-            Reach = %s, 
-            Stance = %s, 
-            DOB = %s, 
-            Strikes_Landed_Per_Minute = %s, 
-            Strike_Accuracy = %s, 
-            Strikes_Absorbed_Per_Minute = %s, 
-            Strike_Defense = %s, 
-            Takedown_Average = %s, 
-            Takedown_Accuracy = %s, 
-            Takedown_Defense = %s, 
-            Submission_Average = %s
-        WHERE 
-            fighterID = %s
-        """
-        data = (*updatedStats.values(), fighterID)
-        cursor.execute(query, data)
-        cnx.commit()
-        
-        print(f"finished updating stats for {firstName} {lastName}")
-    except Exception as e: #if we run into an error means we ran into a fighter not currently in the db -> new fighter 
-        print(e)
-        newFighters.append(fighterStatGrabber(fighterTuple))
-
-
-#add all new fighters into fighterHyperLinks
-if newFighters:
-    print(f"There was new fighters: {newFighters}")
-
-    #format newFighters into format that can be used for sql inserts
-    newFightersDF = pd.DataFrame(newFighters)
-    newFightersDF = newFightersDF.drop('', axis=1)
-    newFightersList = newFightersDF.to_records(index=False).tolist()
-    query = "INSERT INTO fighterHyperlinks (firstName, lastName, hyperlink, Height, Weight, Reach, Stance, DOB, Strikes_Landed_Per_Minute, Strike_Accuracy, Strikes_Absorbed_Per_Minute, Strike_Defense, Takedown_Average, Takedown_Accuracy, Takedown_Defense, Submission_Average) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
-    cursor.executemany(query, newFightersList)
+    #update the eventHyperLinks page
+    query = "INSERT INTO eventHyperlinks (eventName, eventDate, eventLocation, eventHyperLink) VALUES (%s, %s, %s, %s)"
+    cursor.executemany(query, newEvents)
     cnx.commit()
-print("Finished updating fighterHyperLinks table")
+    print("Finished updating the eventHyperLinks table")
 
-###
-#This code block is dedicated to updating the fightStats page
-###
 
-#grab the winners for our events and store in a flattened list
-winnerGrabber = [fightStatGrabberA(row) for row in eventData]
-winnerGrabber = [event for subList in winnerGrabber for event in subList]
+    ###
+    #This code block updates the fighterHyperLink page
+    ###
 
-#gather the fight stats for each fight in our events and store in flattened list
-allFighterStats = [fightStatGrabberB(row) for row in winnerGrabber]
-allFighterStats = [event for subList in allFighterStats for event in subList]
+    Event = namedtuple('Event', ['eventName', 'eventDate', 'eventLocation', 'eventURL'])
+    for event in newEvents:
+        eventTuple = Event(*event)
+        query = f"""
+            SELECT *
+            FROM eventHyperlinks
+            WHERE
+                eventName = '{eventTuple.eventName}' and eventDate = '{eventTuple.eventDate}' and eventHyperLink = '{eventTuple.eventURL}' 
+            """
+    cursor.execute(query)
+    eventData = cursor.fetchall()
 
-allFighterStatsDF = pd.DataFrame(allFighterStats, columns=['fighter_A', 'fighter_B', 'fighter_A_KD', 'fighter_B_KD', 'fighter_a_sig_strikes', 'fighter_b_sig_strikes', 'fighter_a_sig_strike_acc', 'fighter_b_sig_strike_acc', 'fighter_a_total_strikes', 'fighter_b_total_strikes', 'fighter_a_takedowns', 'fighter_b_takedowns', 'fighter_a_takedown_acc', 'fighter_b_takedown_acc', 'fighter_a_sub_attempts', 'fighter_b_sub_attempts', 'fighter_a_reversal', 'fighter_b_reversal', 'fighter_a_control_time', 'fighter_b_control_time', 'fighter_A_ID', 'fighter_B_ID', 'winner', 'weightClass', 'fightURL', 'eventID'])
+    # scrape fighter links so we can see if we have stored in fighterHyperLinks, store in flattened list of tuples
+    fighterData = [data for sublist in (scrape_fighter_data(str(event[4])) for event in eventData) for data in sublist]
 
-#insert into fightStats
-query = """INSERT INTO fightStats (fighterA, fighterB, fighter_A_KD, fighter_B_KD, fighter_A_sig_strikes, fighter_B_sig_strikes, 
-                                   fighter_A_sig_strike_acc, fighter_B_sig_strike_acc, fighter_A_total_strikes, fighter_B_total_strikes, 
-                                   fighter_A_takedowns, fighter_B_takedowns, fighter_A_takedown_acc, fighter_B_takedown_acc, fighter_A_sub_attempts, 
-                                   fighter_B_sub_attempts, fighter_A_reversal, fighter_B_reversal, fighter_A_control_time, fighter_B_control_time, 
-                                   fighter_A_ID, fighter_B_ID, winner, weightClass, fightURL, eventID) 
-                                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"""
-allFighterStatsList = allFighterStatsDF.to_records(index=False).tolist()
-cursor.executemany(query, allFighterStatsList)
-cnx.commit()
+    #seperate so we can add www to links before coupling as tuples again
+    fighterNames, fighterURLs = zip(*fighterData)  
+    updatedURLs = add_www_to_links(fighterURLs)  
+    fighterLinks = list(zip(fighterNames, updatedURLs))
 
-print(f"Added {len(allFighterStatsDF)} fights to our db for the following events: {allFighterStatsDF['eventID'].unique()} and we had a total of {len(newFighters)} new fighters from this event")
-#close out
-cursor.close()
-cnx.close()
+    #fighterLinks now contains the unique links for each fighter, if our db doesnt have yet we need to update with the newly added fighter
+    #this should be changed such that if it doesnt fail we update with the newest info
+    newFighters = []
+    for elem in fighterLinks:
+        try:
+            #gather first, last name, and url for current fighter and store as three part tuple
+            nameParts = elem[0].strip().split(' ', 1)
+            firstName = nameParts[0]
+            lastName = nameParts[1] if len(nameParts) > 1 else ''
+            url = elem[1]
+            fighterTuple = (firstName, lastName, url)
+
+            #if fighter already in db then we need to update stats with latest information
+            fighterID = fighterIDGrabber(url, cursor)
+            fighterTuple = (firstName, lastName, url)
+            updatedStats = (fighterStatGrabber(fighterTuple))
+            updatedStats.pop('', None) #remove empty key that is added
+
+            #update db for our current fighter
+            query = """
+            UPDATE fighterHyperlinks 
+            SET 
+                firstName = %s, 
+                lastName = %s, 
+                hyperlink = %s, 
+                Height = %s, 
+                Weight = %s, 
+                Reach = %s, 
+                Stance = %s, 
+                DOB = %s, 
+                Strikes_Landed_Per_Minute = %s, 
+                Strike_Accuracy = %s, 
+                Strikes_Absorbed_Per_Minute = %s, 
+                Strike_Defense = %s, 
+                Takedown_Average = %s, 
+                Takedown_Accuracy = %s, 
+                Takedown_Defense = %s, 
+                Submission_Average = %s
+            WHERE 
+                fighterID = %s
+            """
+            data = (*updatedStats.values(), fighterID)
+            cursor.execute(query, data)
+            cnx.commit()
+            
+            print(f"finished updating stats for {firstName} {lastName}")
+        except Exception as e: #if we run into an error means we ran into a fighter not currently in the db -> new fighter 
+            print(e)
+            newFighters.append(fighterStatGrabber(fighterTuple))
+
+
+    #add all new fighters into fighterHyperLinks
+    if newFighters:
+        print(f"There was new fighters: {newFighters}")
+
+        #format newFighters into format that can be used for sql inserts
+        newFightersDF = pd.DataFrame(newFighters)
+        newFightersDF = newFightersDF.drop('', axis=1)
+        newFightersList = newFightersDF.to_records(index=False).tolist()
+        query = "INSERT INTO fighterHyperlinks (firstName, lastName, hyperlink, Height, Weight, Reach, Stance, DOB, Strikes_Landed_Per_Minute, Strike_Accuracy, Strikes_Absorbed_Per_Minute, Strike_Defense, Takedown_Average, Takedown_Accuracy, Takedown_Defense, Submission_Average) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
+        cursor.executemany(query, newFightersList)
+        cnx.commit()
+    print("Finished updating fighterHyperLinks table")
+
+    ###
+    #This code block is dedicated to updating the fightStats page
+    ###
+
+    #grab the winners for our events and store in a flattened list
+    winnerGrabber = [fightStatGrabberA(row) for row in eventData]
+    winnerGrabber = [event for subList in winnerGrabber for event in subList]
+
+    #gather the fight stats for each fight in our events and store in flattened list
+    allFighterStats = [fightStatGrabberB(row) for row in winnerGrabber]
+    allFighterStats = [event for subList in allFighterStats for event in subList]
+
+    allFighterStatsDF = pd.DataFrame(allFighterStats, columns=['fighter_A', 'fighter_B', 'fighter_A_KD', 'fighter_B_KD', 'fighter_a_sig_strikes', 'fighter_b_sig_strikes', 'fighter_a_sig_strike_acc', 'fighter_b_sig_strike_acc', 'fighter_a_total_strikes', 'fighter_b_total_strikes', 'fighter_a_takedowns', 'fighter_b_takedowns', 'fighter_a_takedown_acc', 'fighter_b_takedown_acc', 'fighter_a_sub_attempts', 'fighter_b_sub_attempts', 'fighter_a_reversal', 'fighter_b_reversal', 'fighter_a_control_time', 'fighter_b_control_time', 'fighter_A_ID', 'fighter_B_ID', 'winner', 'weightClass', 'fightURL', 'eventID'])
+
+    #insert into fightStats
+    query = """INSERT INTO fightStats (fighterA, fighterB, fighter_A_KD, fighter_B_KD, fighter_A_sig_strikes, fighter_B_sig_strikes, 
+                                    fighter_A_sig_strike_acc, fighter_B_sig_strike_acc, fighter_A_total_strikes, fighter_B_total_strikes, 
+                                    fighter_A_takedowns, fighter_B_takedowns, fighter_A_takedown_acc, fighter_B_takedown_acc, fighter_A_sub_attempts, 
+                                    fighter_B_sub_attempts, fighter_A_reversal, fighter_B_reversal, fighter_A_control_time, fighter_B_control_time, 
+                                    fighter_A_ID, fighter_B_ID, winner, weightClass, fightURL, eventID) 
+                                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"""
+    allFighterStatsList = allFighterStatsDF.to_records(index=False).tolist()
+    cursor.executemany(query, allFighterStatsList)
+    cnx.commit()
+
+    print(f"Added {len(allFighterStatsDF)} fights to our db for the following events: {allFighterStatsDF['eventID'].unique()} and we had a total of {len(newFighters)} new fighters from this event")
+    #close out
+    cursor.close()
+    cnx.close()
+
+    return {
+        "statusCode": 200,
+        "body": json.dumps({
+            "message": "success"
+        }),
+    }
