@@ -14,6 +14,7 @@ cnx = mysql.connector.connect(
     database=loginConfig['database']
 )
 cursor = cnx.cursor()
+print("we connected to db")
 
 """
 This code block is dedicated to setting up the fighterHyperLink table. It contains all the fighters personal stats as well as the hyperlink we grabbed it from
@@ -60,6 +61,7 @@ query = "INSERT INTO fighterHyperlinks (firstName, lastName, hyperlink, Height, 
 allZuffaFightersList = allZuffaFighters.to_records(index=False).tolist()
 cursor.executemany(query, allZuffaFightersList)
 cnx.commit()
+print("finished creating the fighterHyperlinks table")
 
 """
 This block of code is dedicated to building the events table
@@ -81,6 +83,7 @@ cursor.execute("""
 query = "INSERT INTO eventHyperlinks (eventName, eventDate, eventLocation, eventHyperLink) VALUES (%s, %s, %s, %s)"
 cursor.executemany(query, eventList)
 cnx.commit()
+print("finished creating the event hyperlinks table")
 
 
 """
@@ -157,6 +160,7 @@ query = """INSERT INTO fightStats (fighterA, fighterB, fighter_A_KD, fighter_B_K
 allFighterStatsList = allFighterStatsDF.to_records(index=False).tolist()
 cursor.executemany(query, allFighterStatsList)
 cnx.commit()
+print("finished creating the fightStats table")
 
 #close out
 cursor.close()
