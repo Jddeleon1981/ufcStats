@@ -1,20 +1,22 @@
 import requests
 import mysql.connector
 from bs4 import BeautifulSoup
-from sqlConfig import loginConfig
 import tableSetUpMethods as tsum
 import time
 import pandas as pd
 from concurrent.futures import ThreadPoolExecutor
 
+dbCredentials = tsum.getSecret()
 cnx = mysql.connector.connect(
-    user=loginConfig['user'],
-    password=loginConfig['password'],
-    host=loginConfig['host'],
-    database=loginConfig['database']
+    user=dbCredentials['username'],
+    password=dbCredentials['password'],
+    host=dbCredentials['host'],
+    database=dbCredentials['dbname']
 )
 cursor = cnx.cursor()
-print("we connected to db")
+
+print('We connected with secrets manager!')
+
 
 """
 This code block is dedicated to setting up the fighterHyperLink table. It contains all the fighters personal stats as well as the hyperlink we grabbed it from

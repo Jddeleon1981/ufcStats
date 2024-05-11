@@ -3,7 +3,36 @@ import mysql.connector
 from bs4 import BeautifulSoup
 import time
 from concurrent.futures import ThreadPoolExecutor
-from sqlConfig import loginConfig
+import boto3
+from botocore.exceptions import ClientError
+import json
+
+
+"""
+Using AWS secret manager retrieve the db credentials for our mysql ufc db
+"""
+def getSecret():
+
+    secret_name = "ufcStats-db-credentials"
+    region_name = "us-west-1"
+
+    #create client
+    session = boto3.session.Session()
+    client = session.client(
+        service_name='secretsmanager',
+        region_name=region_name
+    )
+    try:
+        get_secret_value_response = client.get_secret_value(
+            SecretId=secret_name
+        )
+    except ClientError as e:
+        raise e
+
+    #format as dict before returning
+    secret = get_secret_value_response['SecretString']
+    return json.loads(secret)
+
 
 """
 We use this method to query the fighterHyperLinks table and grab the fighterID for the fighter we're currently working with so that we can add it to its corresponding row when building the fighterStats table
@@ -202,11 +231,12 @@ eventStats - a tuple containing the winner, weightClass, fight link, and eventID
 """
 def fightStatGrabberB(eventStats):
 
+    dbCredentials = getSecret()
     cnx = mysql.connector.connect(
-        user=loginConfig['user'],
-        password=loginConfig['password'],
-        host=loginConfig['host'],
-        database=loginConfig['database']
+        user=dbCredentials['username'],
+        password=dbCredentials['password'],
+        host=dbCredentials['host'],
+        database=dbCredentials['dbname']
     )
     cursor = cnx.cursor()
 

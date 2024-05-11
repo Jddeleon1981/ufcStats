@@ -1,3 +1,8 @@
+"""
+This file is what is currently running in our lambda function on aws. It runs on a cron like schedule every week on Sundays at 10am. It updates the
+fighter, event and fightStat tables with all of the new data that has potentially occured given that ufc events usually run everynight on Saturdays.
+"""
+
 import requests
 import mysql.connector
 from bs4 import BeautifulSoup
