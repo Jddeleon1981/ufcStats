@@ -11,7 +11,7 @@ cnx = mysql.connector.connect(
     user=dbCredentials['username'],
     password=dbCredentials['password'],
     host=dbCredentials['host'],
-    database=dbCredentials['dbname']
+    database=dbCredentials['dbInstanceIdentifier']
 )
 cursor = cnx.cursor()
 
