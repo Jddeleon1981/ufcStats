@@ -1,0 +1,49 @@
+{% extends 'base.html' %}
+
+{% block title %}
+Fighter Stats
+{% endblock %}
+
+{%block content%}
+Hello! This is a test of the stats page, this was our id: {{ fighterID }}
+<table class="table table-hover table-dark">
+    <thead>
+        <tr>
+            <th>First Name</th>
+            <th>Last Name</th>
+            <th>Height</th>
+            <th>Weight</th>
+            <th>Reach</th>
+            <th>Stance</th>
+            <th>DOB</th>
+            <th>Strikes Landed Per Minute</th>
+            <th>Strike Accuracy</th>
+            <th>Strikes Absorbed Per Minute</th>
+            <th>Strike Defense</th>
+            <th>Takedown Average</th>
+            <th>Takedown Accuracy</th>
+            <th>Takedown Defense</th>
+            <th>Submission Average</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td>{{ fighterStats.firstName }}</td>
+            <td>{{ fighterStats.lastName }}</td>
+            <td>{{ fighterStats.Height }}</td>
+            <td>{{ fighterStats.Weight }}</td>
+            <td>{{ fighterStats.Reach }}</td>
+            <td>{{ fighterStats.Stance }}</td>
+            <td>{{ fighterStats.DOB }}</td>
+            <td>{{ fighterStats.Strikes_Landed_Per_Minute }}</td>
+            <td>{{ fighterStats.Strike_Accuracy }}</td>
+            <td>{{ fighterStats.Strikes_Absorbed_Per_Minute }}</td>
+            <td>{{ fighterStats.Strike_Defense }}</td>
+            <td>{{ fighterStats.Takedown_Average }}</td>
+            <td>{{ fighterStats.Takedown_Accuracy }}</td>
+            <td>{{ fighterStats.Takedown_Defense }}</td>
+            <td>{{ fighterStats.Submission_Average }}</td>
+        </tr>
+    </tbody>
+</table>
+{%endblock%}

@@ -1,8 +1,3 @@
-"""
-This file is what is currently running in our lambda function on aws. It runs on a cron like schedule every week on Sundays at 10am. It updates the
-fighter, event and fightStat tables with all of the new data that has potentially occured given that ufc events usually run everynight on Saturdays.
-"""
-
 import requests
 import mysql.connector
 from bs4 import BeautifulSoup
@@ -247,7 +242,7 @@ def fightStatGrabberB(eventStats):
         user=dbCredentials['username'],
         password=dbCredentials['password'],
         host=dbCredentials['host'],
-        database=dbCredentials['dbname']
+        database=dbCredentials['dbInstanceIdentifier']
     )
     cursor = cnx.cursor()
 
@@ -290,7 +285,7 @@ Using AWS secret manager retrieve the db credentials for our mysql ufc db
 """
 def getSecret():
 
-    secret_name = "ufcStats-db-credentials"
+    secret_name = "ufcDBcred"
     region_name = "us-west-1"
 
     #create client
@@ -310,6 +305,13 @@ def getSecret():
     secret = get_secret_value_response['SecretString']
     return json.loads(secret)
 
+def statusEmail(result):
+    client = boto3.client("ses")
+    subject = "lambda results"
+    body = f"This is what we got from our lambda run: {result}"
+    message = {"Subject": {"Data": subject}, "Body": {"Html": {"Data": body}}}
+    response = client.send_email(Source = "josedeleAWS@gmail.com",
+               Destination = {"ToAddresses": ["josedeleAWS@gmail.com"]}, Message = message)
 
 ###
 #MAIN
@@ -318,13 +320,15 @@ def lambda_handler(event, context):
 
     #grab credientals and connect to db
     dbCredentials = getSecret()
+    print('were able to retrieve the secretes using aws secrets manager')
     cnx = mysql.connector.connect(
         user=dbCredentials['username'],
         password=dbCredentials['password'],
         host=dbCredentials['host'],
-        database=dbCredentials['dbname']
+        database=dbCredentials['dbInstanceIdentifier']
     )
     cursor = cnx.cursor()
+    print("we're able to locally connect using the secretes manager")
 
     ###
     #This snippet is dedicated to updating the eventHyperLinks table
@@ -349,10 +353,13 @@ def lambda_handler(event, context):
 
     #if newEvents is empty a new event hasnt happened yet, exit with a 0
     if not newEvents:
-        print("No deteced new events to update our db with")
+        now = datetime.now()
+        resultString = f'No new events detected when checking on {now}'
+        print(resultString)
+        statusEmail(resultString)
         return {
             'statusCode': 200,
-            'body': json.dumps('No new events detected')
+            'body': json.dumps(resultString)
         }
 
     #update the eventHyperLinks page
@@ -480,6 +487,9 @@ def lambda_handler(event, context):
     cursor.close()
     cnx.close()
 
+    now = datetime.now()
+    resultString = f'Finished updating the database for run: {now}'
+    statusEmail(resultString)
     return {
         "statusCode": 200,
         "body": json.dumps({

@@ -13,7 +13,7 @@ Using AWS secret manager retrieve the db credentials for our mysql ufc db
 """
 def getSecret():
 
-    secret_name = "ufcStats-db-credentials"
+    secret_name = "ufcDBcred"
     region_name = "us-west-1"
 
     #create client
@@ -236,7 +236,7 @@ def fightStatGrabberB(eventStats):
         user=dbCredentials['username'],
         password=dbCredentials['password'],
         host=dbCredentials['host'],
-        database=dbCredentials['dbname']
+        database=dbCredentials['dbInstanceIdentifier']
     )
     cursor = cnx.cursor()
 
