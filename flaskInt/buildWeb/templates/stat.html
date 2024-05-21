@@ -1,0 +1,39 @@
+{% extends 'base.html' %}
+
+{% block title %}
+Stats Page
+{% endblock %}
+
+{%block content%}
+<body class="text-center">
+    <p>This table contains basic information on all fighters throughout Zuffa history. You can get a more detailed breakdown of any of these fighters
+        stats by clicking through their fighter ID.
+    </p>
+    <br>
+
+
+    <div class="container">
+        <table class="table table-hover table-dark">
+            <thead>
+                <tr>
+                    <th scope="'colo">FighterID</th>
+                    <th scope="col">First Name</th>
+                    <th scope="col">Last Name</th>
+                    <th scope="col">DOB</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for fighter in fighters %}
+                    <tr>
+                        <td><a href="{{ url_for('fighterPage', fighterID=fighter.fighter_id) }}">{{ fighter.fighter_id }}</a></td>
+                        <td>{{ fighter.firstName }}</td>
+                        <td>{{ fighter.lastName }}</td>
+                        <td>{{ fighter.DOB }}</td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        <a href="{{ url_for('statsPage', page=page+1) }}">Next Page</a>
+    </div>
+</body>
+{%endblock%}
