@@ -202,9 +202,18 @@ def fightStatGrabberA(event):
         #want to find the winner from this table and store for later
         winner_tag = row.find('a', class_='b-link b-link_style_black')
         header_tag = row.find('th')
-        if winner_tag and not header_tag:  # want to avoid grabbing the tag that just says 'winner'
+        nc_tag = row.find('i', class_='b-flag__text')
+        try:
+            ncTagText = nc_tag.text.strip()
+        except:
+            ncTagText = None
+        if winner_tag and not header_tag and ncTagText != 'nc':  
             winner = winner_tag.get_text().strip()
             winners.append(winner)
+        elif winner_tag and not header_tag and ncTagText == 'nc': 
+            winner = nc_tag.text.strip()
+            winners.append(winner)
+            
 
         #want to grab the weight class and store for later, stored in this kind of class but there multiple columns with this name. Grab the 2nd occurence
         weightClass_tags = row.find_all('td', class_='b-fight-details__table-col l-page_align_left')
