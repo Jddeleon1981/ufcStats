@@ -208,8 +208,16 @@ def fightStatGrabberA(event):
         #want to find the winner from this table and store for later
         winner_tag = row.find('a', class_='b-link b-link_style_black')
         header_tag = row.find('th')
-        if winner_tag and not header_tag:  # want to avoid grabbing the tag that just says 'winner'
+        nc_tag = row.find('i', class_='b-flag__text')
+        try:
+            ncTagText = nc_tag.text.strip()
+        except:
+            ncTagText = None
+        if winner_tag and not header_tag and ncTagText != 'nc':  
             winner = winner_tag.get_text().strip()
+            winners.append(winner)
+        elif winner_tag and not header_tag and ncTagText == 'nc': 
+            winner = nc_tag.text.strip()
             winners.append(winner)
 
         #want to grab the weight class and store for later, stored in this kind of class but there multiple columns with this name. Grab the 2nd occurence
@@ -276,6 +284,20 @@ def fightStatGrabberB(eventStats):
     else:
         return []
     
+    #add code to scrape our three new columns round, time, and method
+    textContent = soup.find('p', class_='b-fight-details__text')
+
+    #grab method tag to extract the method the fight ended and the round
+    method_tag = textContent.find('i', class_='b-fight-details__text-item_first')
+    result = method_tag.find('i', style='font-style: normal').get_text(strip=True)
+    round = method_tag.find_next_sibling('i').get_text(strip=True)
+
+    # Find the time tag to extract when the fight ended
+    time_tag = textContent.find('i', class_='b-fight-details__text-item')
+    time = time_tag.find_next_sibling('i').get_text(strip=True)
+    tmpList = [result, time, round]
+    fightStats.append(tmpList)
+
     cursor.close()
     cnx.close()
     return(fightStats)
@@ -469,15 +491,15 @@ def lambda_handler(event, context):
     allFighterStats = [fightStatGrabberB(row) for row in winnerGrabber]
     allFighterStats = [event for subList in allFighterStats for event in subList]
 
-    allFighterStatsDF = pd.DataFrame(allFighterStats, columns=['fighter_A', 'fighter_B', 'fighter_A_KD', 'fighter_B_KD', 'fighter_a_sig_strikes', 'fighter_b_sig_strikes', 'fighter_a_sig_strike_acc', 'fighter_b_sig_strike_acc', 'fighter_a_total_strikes', 'fighter_b_total_strikes', 'fighter_a_takedowns', 'fighter_b_takedowns', 'fighter_a_takedown_acc', 'fighter_b_takedown_acc', 'fighter_a_sub_attempts', 'fighter_b_sub_attempts', 'fighter_a_reversal', 'fighter_b_reversal', 'fighter_a_control_time', 'fighter_b_control_time', 'fighter_A_ID', 'fighter_B_ID', 'winner', 'weightClass', 'fightURL', 'eventID'])
+    allFighterStatsDF = pd.DataFrame(allFighterStats, columns=['fighter_A', 'fighter_B', 'fighter_A_KD', 'fighter_B_KD', 'fighter_a_sig_strikes', 'fighter_b_sig_strikes', 'fighter_a_sig_strike_acc', 'fighter_b_sig_strike_acc', 'fighter_a_total_strikes', 'fighter_b_total_strikes', 'fighter_a_takedowns', 'fighter_b_takedowns', 'fighter_a_takedown_acc', 'fighter_b_takedown_acc', 'fighter_a_sub_attempts', 'fighter_b_sub_attempts', 'fighter_a_reversal', 'fighter_b_reversal', 'fighter_a_control_time', 'fighter_b_control_time', 'fighter_A_ID', 'fighter_B_ID', 'winner', 'weightClass', 'fightURL', 'eventID', 'method', 'time', 'round'])
 
     #insert into fightStats
     query = """INSERT INTO fightStats (fighterA, fighterB, fighter_A_KD, fighter_B_KD, fighter_A_sig_strikes, fighter_B_sig_strikes, 
                                     fighter_A_sig_strike_acc, fighter_B_sig_strike_acc, fighter_A_total_strikes, fighter_B_total_strikes, 
                                     fighter_A_takedowns, fighter_B_takedowns, fighter_A_takedown_acc, fighter_B_takedown_acc, fighter_A_sub_attempts, 
                                     fighter_B_sub_attempts, fighter_A_reversal, fighter_B_reversal, fighter_A_control_time, fighter_B_control_time, 
-                                    fighter_A_ID, fighter_B_ID, winner, weightClass, fightURL, eventID) 
-                                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"""
+                                    fighter_A_ID, fighter_B_ID, winner, weightClass, fightURL, eventID, method, time, round) 
+                                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"""
     allFighterStatsList = allFighterStatsDF.to_records(index=False).tolist()
     cursor.executemany(query, allFighterStatsList)
     cnx.commit()
