@@ -279,6 +279,20 @@ def fightStatGrabberB(eventStats):
     else:
         return []
     
+    #add code to scrape our three new columns round, time, and method
+    textContent = soup.find('p', class_='b-fight-details__text')
+
+    #grab method tag to extract the method the fight ended and the round
+    method_tag = textContent.find('i', class_='b-fight-details__text-item_first')
+    result = method_tag.find('i', style='font-style: normal').get_text(strip=True)
+    round = method_tag.find_next_sibling('i').get_text(strip=True)
+
+    # Find the time tag to extract when the fight ended
+    time_tag = textContent.find('i', class_='b-fight-details__text-item')
+    time = time_tag.find_next_sibling('i').get_text(strip=True)
+    tmpList = [result, time, round]
+    fightStats.append(tmpList)
+    
     cursor.close()
     cnx.close()
     return(fightStats)
