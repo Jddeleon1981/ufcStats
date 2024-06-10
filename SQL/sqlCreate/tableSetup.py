@@ -2,7 +2,7 @@ import requests
 import mysql.connector
 from bs4 import BeautifulSoup
 import tableSetUpMethods as tsum
-import time
+import numpy as np
 import pandas as pd
 from concurrent.futures import ThreadPoolExecutor
 
@@ -33,6 +33,7 @@ with ThreadPoolExecutor(5) as executor:
 
 allZuffaFighters = pd.DataFrame(allFighterStats)
 allZuffaFighters = allZuffaFighters.drop('', axis=1)
+allZuffaFighters['DOB'] = allZuffaFighters['DOB'].replace({'--': np.nan})
 
 cursor.execute("DROP TABLE IF EXISTS fighterHyperlinks")
 cursor.execute("""
@@ -114,6 +115,10 @@ with ThreadPoolExecutor(10) as executor:
 allFighterStats = [event for subList in allFighterStats for event in subList]
 
 allFighterStatsDF = pd.DataFrame(allFighterStats, columns=['fighter_A', 'fighter_B', 'fighter_A_KD', 'fighter_B_KD', 'fighter_a_sig_strikes', 'fighter_b_sig_strikes', 'fighter_a_sig_strike_acc', 'fighter_b_sig_strike_acc', 'fighter_a_total_strikes', 'fighter_b_total_strikes', 'fighter_a_takedowns', 'fighter_b_takedowns', 'fighter_a_takedown_acc', 'fighter_b_takedown_acc', 'fighter_a_sub_attempts', 'fighter_b_sub_attempts', 'fighter_a_reversal', 'fighter_b_reversal', 'fighter_a_control_time', 'fighter_b_control_time', 'fighter_A_ID', 'fighter_B_ID', 'winner', 'weightClass', 'fightURL', 'eventID', 'method', 'time', 'round'])
+allFighterStatsDF['fighter_a_takedowns'] = allFighterStatsDF['fighter_a_takedowns'].str.split(' ').str[0].astype(int)
+allFighterStatsDF['fighter_b_takedowns'] = allFighterStatsDF['fighter_b_takedowns'].str.split(' ').str[0].astype(int)
+allFighterStatsDF['fighter_a_sig_strikes'] = allFighterStatsDF['fighter_a_sig_strikes'].str.split(' ').str[0].astype(int)
+allFighterStatsDF['fighter_b_sig_strikes'] = allFighterStatsDF['fighter_b_sig_strikes'].str.split(' ').str[0].astype(int)
 
 cursor.execute("DROP TABLE IF EXISTS fightStats")
 cursor.execute("""

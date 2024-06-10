@@ -275,7 +275,6 @@ def fightStatGrabberB(eventStats):
         #add fighterIDs, winner, eventID, and fightLink to our current list
         currFight.extend(fighterIDs)
         currFight.extend(list(eventStats))
-        fightStats.append(currFight)
     else:
         return []
     
@@ -286,12 +285,15 @@ def fightStatGrabberB(eventStats):
     method_tag = textContent.find('i', class_='b-fight-details__text-item_first')
     result = method_tag.find('i', style='font-style: normal').get_text(strip=True)
     round = method_tag.find_next_sibling('i').get_text(strip=True)
+    round = round.split(':')[1]
 
     # Find the time tag to extract when the fight ended
     time_tag = textContent.find('i', class_='b-fight-details__text-item')
-    time = time_tag.find_next_sibling('i').get_text(strip=True)
-    tmpList = [result, time, round]
-    fightStats.append(tmpList)
+    timeResult = time_tag.find_next_sibling('i').get_text(strip=True)
+    timeResult = timeResult.split(":", 1)[1]
+    tmpList = [result, timeResult, round]
+    currFight.extend(tmpList)
+    fightStats.append(currFight)
     
     cursor.close()
     cnx.close()
