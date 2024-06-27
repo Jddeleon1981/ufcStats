@@ -45,6 +45,7 @@ def fighterPage(fighterID):
     fighterStats = FighterStats(*fighterStats)
 
     return render_template('fighterPage.html', fighterStats=fighterStats, fighterID=fighterID)
+
 @app.route('/register')
 def registerPage():
     form = registerForm()
