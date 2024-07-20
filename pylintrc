@@ -1,0 +1,76 @@
+[MASTER]
+
+# Specify a configuration file.
+rcfile=
+
+# Python code to execute, usually for sys.path sys.argv manipulation
+init-hook=
+
+# Add files or directories to the blacklist. They should be base names, not paths.
+ignore=CVS
+
+# Add files or directories matching the regex patterns to the blacklist. The regex matches against base names, not paths.
+ignore-patterns=
+
+[MESSAGES CONTROL]
+
+# Only show warnings with the listed confidence levels. Leave empty to show all of them.
+confidence=
+
+# Enable the message, report, category or checker with the given id(s).
+enable=all
+
+# Disable the message, report, category or checker with the given id(s).
+disable=C0303,      #mutes the trailing whitespace warning because it continually got triggered on newlines instead of actual trailing whitespace
+        W0718,      #mutes warning over general exception catch
+        W0621       #mutes warning over redfining names from outer scope            
+[REPORTS]
+
+# Set the output format. Available formats are text, parseable, colorized, json and msvs (visual studio).
+output-format=text
+
+[FORMAT]
+
+# Maximum number of characters on a single line.
+max-line-length=175
+
+# Regexp for a line that is allowed to be longer than the limit.
+ignore-long-lines=
+
+[LOGGING]
+
+# Logging modules to check that the string format arguments are in logging function parameter format
+logging-modules=logging
+
+[BASIC]
+
+module-naming-style=camelCase
+
+# Variable names can be 1 to 30 characters long (inclusive).
+variable-rgx=[a-z_][a-z0-9_]{0,29}$
+
+# Argument names can be 1 to 30 characters long (inclusive).
+argument-rgx=[a-z_][a-z0-9_]{0,29}$
+
+# Method names should be at least 3 characters long.
+method-rgx=[a-z_][a-z0-9_]{2,30}$
+
+[DESIGN]
+
+# Maximum number of arguments for function / method.
+max-args=8
+
+[IMPORTS]
+
+# Deprecated modules which should not be used, separated by a comma
+deprecated-modules=
+
+[CLASSES]
+
+# List of method names used to declare (i.e. assign) instance attributes.
+defining-attr-methods=__init__, __new__, setUp, tearDown
+
+[EXCEPTIONS]
+
+# Exceptions that will emit a warning when being caught. Defaults to "Exception"
+overgeneral-exceptions=builtins.Exception
