@@ -2,7 +2,7 @@ import requests
 import mysql.connector
 from bs4 import BeautifulSoup
 import tableSetUpMethods as tsum
-import time
+import numpy as np
 import pandas as pd
 from concurrent.futures import ThreadPoolExecutor
 
@@ -59,7 +59,8 @@ with ThreadPoolExecutor(5) as executor:
     allFighterStats = list(executor.map(tsum.fighterStatGrabber, allZuffaFighters))
 
 allZuffaFighters = pd.DataFrame(allFighterStats)
-allZuffaFighters = allZuffaFighters.drop("", axis=1)
+allZuffaFighters = allZuffaFighters.drop('', axis=1)
+allZuffaFighters['DOB'] = allZuffaFighters['DOB'].replace({'--': np.nan})
 
 cursor.execute("DROP TABLE IF EXISTS fighterHyperlinks")
 cursor.execute(
@@ -180,6 +181,10 @@ allFighterStatsDF = pd.DataFrame(
         "round",
     ],
 )
+allFighterStatsDF['fighter_a_takedowns'] = allFighterStatsDF['fighter_a_takedowns'].str.split(' ').str[0].astype(int)
+allFighterStatsDF['fighter_b_takedowns'] = allFighterStatsDF['fighter_b_takedowns'].str.split(' ').str[0].astype(int)
+allFighterStatsDF['fighter_a_sig_strikes'] = allFighterStatsDF['fighter_a_sig_strikes'].str.split(' ').str[0].astype(int)
+allFighterStatsDF['fighter_b_sig_strikes'] = allFighterStatsDF['fighter_b_sig_strikes'].str.split(' ').str[0].astype(int)
 
 cursor.execute("DROP TABLE IF EXISTS fightStats")
 cursor.execute(

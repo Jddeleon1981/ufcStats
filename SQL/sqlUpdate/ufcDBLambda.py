@@ -4,10 +4,13 @@ from bs4 import BeautifulSoup
 import time
 import pandas as pd
 from datetime import datetime
+import numpy as np
 from collections import namedtuple
 import boto3
 from botocore.exceptions import ClientError
 import json
+
+
 
 """
 This method grabs events that have taken place that are not currently in our database 
@@ -318,7 +321,6 @@ def fightStatGrabberB(eventStats):
         # add fighterIDs, winner, eventID, and fightLink to our current list
         currFight.extend(fighterIDs)
         currFight.extend(list(eventStats))
-        fightStats.append(currFight)
     else:
         return []
 
@@ -329,12 +331,15 @@ def fightStatGrabberB(eventStats):
     method_tag = textContent.find("i", class_="b-fight-details__text-item_first")
     result = method_tag.find("i", style="font-style: normal").get_text(strip=True)
     round = method_tag.find_next_sibling("i").get_text(strip=True)
+    round = round.split(':')[1]
 
     # Find the time tag to extract when the fight ended
-    time_tag = textContent.find("i", class_="b-fight-details__text-item")
-    time = time_tag.find_next_sibling("i").get_text(strip=True)
-    tmpList = [result, time, round]
-    fightStats.append(tmpList)
+    time_tag = textContent.find('i', class_='b-fight-details__text-item')
+    timeResult = time_tag.find_next_sibling('i').get_text(strip=True)
+    timeResult = timeResult.split(":", 1)[1]
+    tmpList = [result, timeResult, round]
+    currFight.extend(list(tmpList))
+    fightStats.append(currFight)
 
     cursor.close()
     cnx.close()
@@ -383,7 +388,7 @@ def lambda_handler(event, context):
 
     # grab credientals and connect to db
     dbCredentials = getSecret()
-    print("were able to retrieve the secretes using aws secrets manager")
+    print('connected with secrets manager')
     cnx = mysql.connector.connect(
         user=dbCredentials["username"],
         password=dbCredentials["password"],
@@ -391,7 +396,6 @@ def lambda_handler(event, context):
         database=dbCredentials["dbInstanceIdentifier"],
     )
     cursor = cnx.cursor()
-    print("we're able to locally connect using the secretes manager")
 
     ###
     # This snippet is dedicated to updating the eventHyperLinks table
@@ -518,6 +522,7 @@ def lambda_handler(event, context):
         # format newFighters into format that can be used for sql inserts
         newFightersDF = pd.DataFrame(newFighters)
         newFightersDF = newFightersDF.drop("", axis=1)
+        newFightersDF['DOB'] = newFightersDF['DOB'].replace({'--': np.nan})
         newFightersList = newFightersDF.to_records(index=False).tolist()
         query = "INSERT INTO fighterHyperlinks (firstName, lastName, hyperlink, Height, Weight, Reach, Stance, DOB, Strikes_Landed_Per_Minute, Strike_Accuracy, Strikes_Absorbed_Per_Minute, Strike_Defense, Takedown_Average, Takedown_Accuracy, Takedown_Defense, Submission_Average) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
         cursor.executemany(query, newFightersList)
@@ -570,6 +575,10 @@ def lambda_handler(event, context):
             "round",
         ],
     )
+    allFighterStatsDF['fighter_a_takedowns'] = allFighterStatsDF['fighter_a_takedowns'].str.split(' ').str[0].astype(int)
+    allFighterStatsDF['fighter_b_takedowns'] = allFighterStatsDF['fighter_b_takedowns'].str.split(' ').str[0].astype(int)
+    allFighterStatsDF['fighter_a_sig_strikes'] = allFighterStatsDF['fighter_a_sig_strikes'].str.split(' ').str[0].astype(int)
+    allFighterStatsDF['fighter_b_sig_strikes'] = allFighterStatsDF['fighter_b_sig_strikes'].str.split(' ').str[0].astype(int)
 
     # insert into fightStats
     query = """INSERT INTO fightStats (fighterA, fighterB, fighter_A_KD, fighter_B_KD, fighter_A_sig_strikes, fighter_B_sig_strikes, 
