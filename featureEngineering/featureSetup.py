@@ -1,11 +1,17 @@
+"""
+This file stores the sql queries that are used to create the features that will be fed into our prediction models.
+"""
+
+import json
+from typing import Dict
 import boto3
 from botocore.exceptions import ClientError
-import json
-from pandasql import sqldf
 import pandas as pd
+from pandasql import sqldf
 
 
-def getSecret():
+def get_secret() -> Dict:
+    """Used to retrieve mysql info from aws secrets manager"""
 
     secret_name = "ufcDBcred"
     region_name = "us-west-1"
@@ -23,10 +29,10 @@ def getSecret():
     return json.loads(secret)
 
 
-def setupFeatures(fightsTable, fightersTable):
-    """
-    This query allows for us to see the win percentage of fighters throughout their careers
-    """
+def set_up_features(fights_table, fighters_table):
+    """This method allows for us to create all the features from our starting data"""
+
+    # This query allows for us to see the win percentage of fighters throughout their careers
     query = """ 
     SELECT fighterID, fighter, eventDate, eventID, fightID, AVG(winCount) OVER (PARTITION BY fighterID ORDER BY eventDate ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING) as winPercentage
     FROM(
@@ -35,73 +41,62 @@ def setupFeatures(fightsTable, fightersTable):
             WHEN winner = fighterA THEN 1
             ELSE 0
         END as winCount
-        FROM fightsTable 
+        FROM fights_table 
         UNION ALL
         SELECT fighterB as fighter, fighter_B_ID as fighterID, winner, eventDate, eventID, fightID,
         CASE
             WHEN winner = fighterB THEN 1
             ELSE 0
         END as winCount
-        FROM fightsTable
+        FROM fights_table
     ) as winCounts
     ORDER BY fighterID, eventDate
     """
-    winPercentageResult = sqldf(query)
+    win_percentage_result = sqldf(query)
 
-    """ 
-    This table is dedicated to calculating the average fight time for a fighter throughout their ufc career
-    """
-
+    # This table is dedicated to calculating the average fight time for a fighter throughout their ufc career
     query = """
     SELECT fighter, fighterID, eventDate, eventID, fightID, AVG(`Minutes In Fight`) OVER (PARTITION BY fighterID ORDER BY eventDate ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING) as averageFightTime
     FROM(
         SELECT fighterA as fighter, fighter_A_ID as fighterID, `Minutes In Fight`, eventDate, eventID, fightID
-        FROM fightsTable
+        FROM fights_table
         UNION ALL
         SELECT fighterB as fighter, fighter_B_ID as fighterID, `Minutes In Fight`, eventDate, eventID, fightID
-        FROM fightsTable
+        FROM fights_table
     ) innerQuery
     order by fighterID, eventDate
     """
-    averageFightTimeResult = sqldf(query)
+    average_fight_time_result = sqldf(query)
 
-    """ 
-    This block shows us the age of the fighter at the time of the bout
-    """
+    # This block shows us the age of the fighter at the time of the bout
     query = """
     select fighter, innerQuery.fighterID, DOB, eventID, fightID, 
         (julianday(innerQuery.eventDate) - julianday(DOB)) / 365.25 as Age
     from(
         SELECT fighterA as fighter, fighter_A_ID as fighterID, `Minutes In Fight`, eventDate, eventID, fightID
-        FROM fightsTable
+        FROM fights_table
         UNION ALL
         SELECT fighterB as fighter, fighter_B_ID as fighterID, `Minutes In Fight`, eventDate, eventID, fightID
-        FROM fightsTable
+        FROM fights_table
     )innerQuery
-    LEFT JOIN fightersTable on innerQuery.fighterID = fightersTable.fighterID
+    LEFT JOIN fighters_table on innerQuery.fighterID = fighters_table.fighterID
     """
-    ageResult = sqldf(query)
+    age_result = sqldf(query)
 
-    """ 
-    This code block is dedicated towards finding the # of ufc fights (experience) a fighter had going into a bout
-    """
-
+    # This code block is dedicated towards finding the # of ufc fights (experience) a fighter had going into a bout
     query = """ 
     select fighter, fighterID, eventDate, eventID, count(*) OVER (PARTITION BY fighterID ORDER BY eventDate ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING) as numOfFights
     from(
         SELECT fighterA as fighter, fighter_A_ID as fighterID, `Minutes In Fight`, eventDate, eventID, fightID
-        FROM fightsTable
+        FROM fights_table
         UNION ALL
         SELECT fighterB as fighter, fighter_B_ID as fighterID, `Minutes In Fight`, eventDate, eventID, fightID
-        FROM fightsTable
+        FROM fights_table
     ) innerQuery
     """
-    experienceResult = sqldf(query)
+    experience_result = sqldf(query)
 
-    """ 
-    This block is focused on finding the finish rate for fighters among their wins
-    """
-
+    # This block is focused on finding the finish rate for fighters among their wins
     query = """ 
     SELECT fighter, fighterID, eventDate, eventID, fightID, COALESCE(AVG(numMethod) OVER (PARTITION BY fighterID ORDER BY eventDate ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING), 0) as finishRate
     FROM(
@@ -113,7 +108,7 @@ def setupFeatures(fightsTable, fightersTable):
             WHEN winner != fighterA THEN 0
             ELSE 0
         END AS numMethod
-        FROM fightsTable
+        FROM fights_table
         UNION ALL
         SELECT fighterB as fighter, fighter_B_ID as fighterID, eventDate, eventID, fightID,
         CASE
@@ -123,111 +118,103 @@ def setupFeatures(fightsTable, fightersTable):
             WHEN winner != fighterB THEN 0
             ELSE 0
         END AS numMethod
-        FROM fightsTable
+        FROM fights_table
     )
     """
-    finishRateResult = sqldf(query)
+    finish_rate_result = sqldf(query)
 
-    """ 
-    This block is for calculating the striking differential
-    """
+    # This block is for calculating the striking differential
     query = """ 
     SELECT fighter, fighterID, eventDate, eventID, fightID, significantStrikesLanded, significantStrikesAbsorbed
     FROM(
         SELECT fighterA as fighter, fighter_A_ID as fighterID, fighter_A_sig_strikes as significantStrikesLanded, fighter_B_sig_strikes as significantStrikesAbsorbed, eventDate, eventID, fightID
-        FROM fightsTable
+        FROM fights_table
         UNION ALL
         SELECT fighterB as fighter, fighter_B_ID as fighterID, fighter_B_sig_strikes as significantStrikesLanded, fighter_A_sig_strikes as significantStrikesAbsorbed, eventDate, eventID, fightID
-        FROM fightsTable
+        FROM fights_table
     )
     """
-    strikeDifferentialResult = sqldf(query)
-    strikeDifferentialResult["significantStrikesLanded"] = strikeDifferentialResult[
+    strike_differential_result = sqldf(query)
+    strike_differential_result["significantStrikesLanded"] = strike_differential_result[
         "significantStrikesLanded"
     ].astype(int)
-    strikeDifferentialResult["significantStrikesAbsorbed"] = strikeDifferentialResult[
-        "significantStrikesAbsorbed"
-    ].astype(int)
+    strike_differential_result["significantStrikesAbsorbed"] = (
+        strike_differential_result["significantStrikesAbsorbed"].astype(int)
+    )
 
-    strikeDifferentialResult = strikeDifferentialResult.sort_values(
+    strike_differential_result = strike_differential_result.sort_values(
         by=["fighterID", "eventDate"]
     )
-    strikeDifferentialResult["cumulativeStrikesLanded"] = (
-        strikeDifferentialResult.groupby("fighterID")["significantStrikesLanded"]
+    strike_differential_result["cumulativeStrikesLanded"] = (
+        strike_differential_result.groupby("fighterID")["significantStrikesLanded"]
         .cumsum()
         .shift(1)
     )
-    strikeDifferentialResult["cumulativeStrikesAbsorbed"] = (
-        strikeDifferentialResult.groupby("fighterID")["significantStrikesAbsorbed"]
+    strike_differential_result["cumulativeStrikesAbsorbed"] = (
+        strike_differential_result.groupby("fighterID")["significantStrikesAbsorbed"]
         .cumsum()
         .shift(1)
     )
 
     # Calculate the strikeDifferential
-    strikeDifferentialResult["strikeDifferential"] = (
-        strikeDifferentialResult["cumulativeStrikesLanded"]
-        / strikeDifferentialResult["cumulativeStrikesAbsorbed"]
+    strike_differential_result["strikeDifferential"] = (
+        strike_differential_result["cumulativeStrikesLanded"]
+        / strike_differential_result["cumulativeStrikesAbsorbed"]
     )
 
-    """ 
-    This code block is dedicated to finding out the takedown differential
-    """
+    # This code block is dedicated to finding out the takedown differential
     query = """ 
     SELECT fighter, fighterID, eventDate, eventID, takedownsLanded, takedownsAbsorbed, fightID
     FROM(
         SELECT fighterA as fighter, fighter_A_ID as fighterID, fighter_A_takedowns as takedownsLanded, fighter_B_takedowns as takedownsAbsorbed, eventDate, eventID, fightID
-        FROM fightsTable
+        FROM fights_table
         UNION ALL
         SELECT fighterB as fighter, fighter_B_ID as fighterID, fighter_B_takedowns as takedownsLanded, fighter_A_takedowns as takedownsAbsorbed, eventDate, eventID, fightID
-        FROM fightsTable
+        FROM fights_table
     )
     """
-    takedownDifferentialResult = sqldf(query)
+    takedown_differential_result = sqldf(query)
 
-    takedownDifferentialResult = takedownDifferentialResult.sort_values(
+    takedown_differential_result = takedown_differential_result.sort_values(
         by=["fighterID", "eventDate"]
     )
-    takedownDifferentialResult["takedownsLanded"] = takedownDifferentialResult[
+    takedown_differential_result["takedownsLanded"] = takedown_differential_result[
         "takedownsLanded"
     ].astype(int)
-    takedownDifferentialResult["takedownsAbsorbed"] = takedownDifferentialResult[
+    takedown_differential_result["takedownsAbsorbed"] = takedown_differential_result[
         "takedownsAbsorbed"
     ].astype(int)
 
-    takedownDifferentialResult["cumulativeTakedownsLanded"] = (
-        takedownDifferentialResult.groupby("fighterID")["takedownsLanded"]
+    takedown_differential_result["cumulativeTakedownsLanded"] = (
+        takedown_differential_result.groupby("fighterID")["takedownsLanded"]
         .cumsum()
         .shift(1)
     )
-    takedownDifferentialResult["cumulativeTakedownsAbsorbed"] = (
-        takedownDifferentialResult.groupby("fighterID")["takedownsAbsorbed"]
+    takedown_differential_result["cumulativeTakedownsAbsorbed"] = (
+        takedown_differential_result.groupby("fighterID")["takedownsAbsorbed"]
         .cumsum()
         .shift(1)
     )
 
     # Calculate the takedownDifferential
-    takedownDifferentialResult["takedownDifferential"] = (
-        takedownDifferentialResult["cumulativeTakedownsLanded"]
-        / takedownDifferentialResult["cumulativeTakedownsAbsorbed"]
+    takedown_differential_result["takedownDifferential"] = (
+        takedown_differential_result["cumulativeTakedownsLanded"]
+        / takedown_differential_result["cumulativeTakedownsAbsorbed"]
     )
 
-    """ 
-    This block will extract the weight class and stance for each fighter
-    """
+    # This block will extract the weight class and stance for each fighter
     query = """ 
-    SELECT fighterA as fighter, fighter_A_ID as fighterID, weightClass, fightersTable.stance, eventDate, eventID, fightID
-    FROM fightsTable LEFT JOIN
-    fightersTable on fightsTable.fighter_A_ID = fightersTable.fighterID
+    SELECT fighterA as fighter, fighter_A_ID as fighterID, weightClass, fighters_table.stance, eventDate, eventID, fightID
+    FROM fights_table LEFT JOIN
+    fighters_table on fights_table.fighter_A_ID = fighters_table.fighterID
     UNION ALL
-    SELECT fighterB as fighter, fighter_B_ID as fighterID, weightClass, fightersTable.stance, eventDate, eventID, fightID
-    FROM fightsTable LEFT JOIN
-    fightersTable on fightsTable.fighter_B_ID = fightersTable.fighterID
+    SELECT fighterB as fighter, fighter_B_ID as fighterID, weightClass, fighters_table.stance, eventDate, eventID, fightID
+    FROM fights_table LEFT JOIN
+    fighters_table on fights_table.fighter_B_ID = fighters_table.fighterID
     """
-    weightClassResult = sqldf(query)
+    weightclass_result = sqldf(query)
 
-    """ 
-    This block will be focused on calculating the winstreak for fighters
-    """
+    # This block will be focused on calculating the winstreak for fighters
     query = """ 
     select *
     FROM(
@@ -236,105 +223,108 @@ def setupFeatures(fightsTable, fightersTable):
         WHEN fighterA = winner THEN 1
         ELSE 0
     end as winResult
-    FROM fightsTable 
+    FROM fights_table 
     UNION ALL
     SELECT fighterB as fighter, fighterA as oponnent, fighter_B_ID as fighterID, winner, eventDate, eventID, fightID,
     CASE
         WHEN fighterB = winner THEN 1
         ELSE 0
     end as winResult
-    FROM fightsTable 
+    FROM fights_table 
     )
     order by fighterID, eventDate
     """
-    winstreakResult = sqldf(query)
-    winstreakResult = createWinStreak(winstreakResult)
+    winstreak_result = sqldf(query)
+    winstreak_result = create_win_streak(winstreak_result)
 
-    """ 
-    This code block is dedicated towards finding the fighters average control time
-    """
+    # This code block is dedicated towards finding the fighters average control time
     query = """ 
     SELECT fighterA as fighter, fighter_A_ID as fighterID, fighter_A_control_time as controlTime, `Minutes In Fight`, eventDate, eventID, fightID
-    FROM fightsTable 
+    FROM fights_table 
     UNION ALL
     SELECT fighterB as fighter, fighter_B_ID as fighterID, fighter_B_control_time as controlTime, `Minutes In Fight`, eventDate, eventID, fightID
-    FROM fightsTable 
+    FROM fights_table 
     """
-    averageControlTimeResult = sqldf(query)
+    average_control_time_result = sqldf(query)
 
-    averageControlTimeResult[["minutes", "seconds"]] = averageControlTimeResult[
+    average_control_time_result[["minutes", "seconds"]] = average_control_time_result[
         "controlTime"
     ].str.split(":", expand=True)
-    averageControlTimeResult["minutes"] = averageControlTimeResult["minutes"].astype(
-        int
+    average_control_time_result["minutes"] = average_control_time_result[
+        "minutes"
+    ].astype(int)
+    average_control_time_result["seconds"] = average_control_time_result[
+        "seconds"
+    ].astype(int)
+    average_control_time_result["Control Time In Minutes"] = (
+        average_control_time_result["minutes"]
+        + average_control_time_result["seconds"] / 60
     )
-    averageControlTimeResult["seconds"] = averageControlTimeResult["seconds"].astype(
-        int
-    )
-    averageControlTimeResult["Control Time In Minutes"] = (
-        averageControlTimeResult["minutes"] + averageControlTimeResult["seconds"] / 60
-    )
-    averageControlTimeResult.drop(["minutes", "seconds"], axis=1, inplace=True)
-    averageControlTimeResult["controlPercentage"] = (
-        averageControlTimeResult["Control Time In Minutes"]
-        / averageControlTimeResult["Minutes In Fight"]
+    average_control_time_result.drop(["minutes", "seconds"], axis=1, inplace=True)
+    average_control_time_result["controlPercentage"] = (
+        average_control_time_result["Control Time In Minutes"]
+        / average_control_time_result["Minutes In Fight"]
     )
 
     query = """ 
     select *, AVG(controlPercentage) OVER (PARTITION BY fighterID ORDER BY eventDate ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING) as averageControlTime
-    from averageControlTimeResult
+    from average_control_time_result
     """
-    averageControlPercentageResult = sqldf(query)
+    average_control_percentage_result = sqldf(query)
 
-    final = averageControlPercentageResult.loc[
+    final = average_control_percentage_result.loc[
         :, ["fighter", "fighterID", "averageControlTime", "eventID", "fightID"]
     ]
-    testDF = joinTogether(
-        final, "final", experienceResult, "experienceResult", "numOfFights"
+    test_df = join_together(
+        final, "final", experience_result, "experience_result", "numOfFights"
     )
-    testDF = joinTogether(
-        testDF, "testDF", winPercentageResult, "winPercentageResult", "winPercentage"
+    test_df = join_together(
+        test_df,
+        "test_df",
+        win_percentage_result,
+        "win_percentage_result",
+        "winPercentage",
     )
-    testDF = joinTogether(
-        testDF,
-        "testDF",
-        averageFightTimeResult,
-        "averageFightTimeResult",
+    test_df = join_together(
+        test_df,
+        "test_df",
+        average_fight_time_result,
+        "average_fight_time_result",
         "averageFightTime",
     )
-    testDF = joinTogether(testDF, "testDF", ageResult, "ageResult", "Age")
-    testDF = joinTogether(
-        testDF, "testDF", finishRateResult, "finishRateResult", "finishRate"
+    test_df = join_together(test_df, "test_df", age_result, "age_result", "Age")
+    test_df = join_together(
+        test_df, "test_df", finish_rate_result, "finish_rate_result", "finishRate"
     )
-    testDF = joinTogether(
-        testDF,
-        "testDF",
-        strikeDifferentialResult,
-        "strikeDifferentialResult",
+    test_df = join_together(
+        test_df,
+        "test_df",
+        strike_differential_result,
+        "strike_differential_result",
         "strikeDifferential",
     )
-    testDF = joinTogether(
-        testDF,
-        "testDF",
-        takedownDifferentialResult,
-        "takedownDifferentialResult",
+    test_df = join_together(
+        test_df,
+        "test_df",
+        takedown_differential_result,
+        "takedown_differential_result",
         "takedownDifferential",
     )
-    testDF = joinTogether(
-        testDF, "testDF", weightClassResult, "weightClassResult", "weightClass"
+    test_df = join_together(
+        test_df, "test_df", weightclass_result, "weightclass_result", "weightClass"
     )
-    testDF = joinTogether(
-        testDF, "testDF", winstreakResult, "winstreakResult", "winStreak"
+    test_df = join_together(
+        test_df, "test_df", winstreak_result, "winstreak_result", "winStreak"
     )
-    testDF = joinTogether(
-        testDF,
-        "testDF",
-        averageControlPercentageResult,
-        "averageControlPercentageResult",
+    test_df = join_together(
+        test_df,
+        "test_df",
+        average_control_percentage_result,
+        "average_control_percentage_result",
         "controlPercentage",
     )
 
-    testDF["row_number"] = testDF.groupby("fightID").cumcount() + 1
+    test_df["row_number"] = test_df.groupby("fightID").cumcount() + 1
 
     # Define the SQL query to separate fighters and their stats
     query = """
@@ -367,7 +357,7 @@ def setupFeatures(fightsTable, fightersTable):
         MAX(CASE WHEN row_number = 1 THEN numOfFights ELSE NULL END) AS numberOfFightsA,
         MAX(CASE WHEN row_number = 2 THEN numOfFights ELSE NULL END) AS numberOfFightsB,
         MAX(eventID) AS eventID
-    FROM testDF
+    FROM test_df
     GROUP BY fightID
     """
 
@@ -376,32 +366,33 @@ def setupFeatures(fightsTable, fightersTable):
 
     # join the winners back into test
     result_df = result_df.merge(
-        fightsTable[["fightID", "winner"]], on="fightID", how="left"
+        fights_table[["fightID", "winner"]], on="fightID", how="left"
     )
 
     return result_df
 
 
-def createWinStreak(df) -> pd.DataFrame:
+def create_win_streak(df) -> pd.DataFrame:
+    """Allows for us to create the winstreak feature for the fighters"""
 
-    currentFighter = df["fighter"][0]
-    refreshStreak = 0
+    current_fighter = df["fighter"][0]
+    refresh_streak = 0
     for index, row in df.iterrows():
 
         # handle first row
         if index == 0:
-            df.loc[index, "winStreak"] = refreshStreak
+            df.loc[index, "winStreak"] = refresh_streak
             continue
 
         # if we hit a new fighter auto insert 0 as the winstreak, update, and move on
-        if currentFighter != row["fighter"]:
-            currentFighter = row["fighter"]
-            df.loc[index, "winStreak"] = refreshStreak
+        if current_fighter != row["fighter"]:
+            current_fighter = row["fighter"]
+            df.loc[index, "winStreak"] = refresh_streak
             continue
 
         # catch when fighter lost their last fight, can insert 0 and move on
         if df.loc[(index - 1), "winner"] != df.loc[(index - 1), "fighter"]:
-            df.loc[index, "winStreak"] = refreshStreak
+            df.loc[index, "winStreak"] = refresh_streak
             continue
 
         # since we are here it means that we are still on the same fighter and they havent lost
@@ -410,15 +401,18 @@ def createWinStreak(df) -> pd.DataFrame:
     return df
 
 
-def joinTogether(orgDF, orgDFString, joiningDF, joiningDFString, specialColumn):
+def join_together(
+    org_df, org_df_string, joining_df, joining_df_string, special_column
+) -> pd.DataFrame:
+    """Joins together the dfs we created on the common eventID"""
 
     query = f""" 
-    SELECT odf.*, jdf.{specialColumn}
-    FROM {orgDFString} as odf LEFT JOIN
-    {joiningDFString} as jdf ON odf.eventID = jdf.eventID
+    SELECT odf.*, jdf.{special_column}
+    FROM {org_df_string} as odf LEFT JOIN
+    {joining_df_string} as jdf ON odf.eventID = jdf.eventID
     AND odf.fighterID = jdf.fighterID
     """
-    env = {orgDFString: orgDF, joiningDFString: joiningDF}
+    env = {org_df_string: org_df, joining_df_string: joining_df}
     return sqldf(query, env)
 
 

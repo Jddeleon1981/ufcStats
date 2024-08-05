@@ -1,10 +1,12 @@
+"""Builds the basic register form for our website"""
 from flask_wtf import FlaskForm
 from wtforms import StringField, PasswordField, SubmitField
 
 
-class registerForm(FlaskForm):
+class RegisterForm(FlaskForm):
+    """Establishes the different fields we'll need when creating the account"""
     username = StringField(label="User Name:")
-    emailAddress = StringField(label="Email:")
+    email_address = StringField(label="Email:")
     password = PasswordField(label="Password")
-    verifyPassword = PasswordField(label="Verify Password")
+    verify_password = PasswordField(label="Verify Password")
     submit = SubmitField(label="Create Account")
