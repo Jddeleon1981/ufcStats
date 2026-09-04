@@ -1,29 +1,22 @@
 """
 This script setups our db such that it will contain three tables: fightStats, fighterHyperlinks, and eventHyperlinks.
-Making use of the tsum methods we will scrape the ufc stats page to gather all of the information that we'll later feed into
+Making use of the shared ufcPipeline helpers we will scrape the ufc stats page to gather all of the information that we'll later feed into
 our ML models.
 """
 
 from concurrent.futures import ThreadPoolExecutor
-import mysql.connector
 import pandas as pd
 import numpy as np
-import tableSetUpMethods as tsum
+from ufcPipeline import scraping, db
 
-db_credentials = tsum.get_secret()
-cnx = mysql.connector.connect(
-    user=db_credentials["username"],
-    password=db_credentials["password"],
-    host=db_credentials["host"],
-    database=db_credentials["dbInstanceIdentifier"],
-)
+cnx = db.connect()
 cursor = cnx.cursor()
 
 print("We connected with secrets manager!")
 
 
 ###
-# This code block is dedicated to setting up the fighterHyperLink table. It contains all the fighters personal stats 
+# This code block is dedicated to setting up the fighterHyperLink table. It contains all the fighters personal stats
 # as well as the hyperlink we grabbed it from
 ###
 
@@ -60,16 +53,16 @@ last_name_letters = [
 # grabs links for each fighter so we can scrape them later on
 # its stored in a list of lists so we flatten it out before continuing
 with ThreadPoolExecutor(5) as executor:
-    all_zuffa_fighters = list(executor.map(tsum.hyperlink_grabber, last_name_letters))
+    all_zuffa_fighters = list(executor.map(scraping.hyperlink_grabber, last_name_letters))
 all_zuffa_fighters = [fighter for subList in all_zuffa_fighters for fighter in subList]
 
 # now scrape all of the stats from the recorded links
 with ThreadPoolExecutor(5) as executor:
-    all_fighter_stats = list(executor.map(tsum.fighter_stat_grabber, all_zuffa_fighters))
+    all_fighter_stats = list(executor.map(scraping.fighter_stat_grabber, all_zuffa_fighters))
 
 all_zuffa_fighters_df = pd.DataFrame(all_fighter_stats)
 all_zuffa_fighters_df = all_zuffa_fighters_df.drop("", axis=1)
-all_zuffa_fighters['DOB'] = all_zuffa_fighters['DOB'].replace({'--': np.nan})
+all_zuffa_fighters_df['DOB'] = all_zuffa_fighters_df['DOB'].replace({'--': np.nan})
 
 cursor.execute("DROP TABLE IF EXISTS fighterHyperlinks")
 cursor.execute(
@@ -107,7 +100,7 @@ print("finished creating the fighterHyperlinks table")
 ###
 # This block of code is dedicated to building the events table
 ###
-event_list = tsum.ufc_event_grabber()
+event_list = scraping.ufc_event_grabber()
 cursor.execute("DROP TABLE IF EXISTS eventHyperlinks")
 cursor.execute(
     """
@@ -130,7 +123,7 @@ print("finished creating the event hyperlinks table")
 
 
 ###
-# This code block is dedicated to setting up the fightStats table. It contains fight stats for events starting from the 2000s 
+# This code block is dedicated to setting up the fightStats table. It contains fight stats for events starting from the 2000s
 # since thats when the unified rule set was established
 ###
 
@@ -149,12 +142,12 @@ structured_array = modern_era.to_records(index=False)
 eventHyperLinks = list(structured_array)
 
 with ThreadPoolExecutor(10) as executor:
-    winner_grabber = list(executor.map(tsum.fight_stat_grabber_a, eventHyperLinks))
+    winner_grabber = list(executor.map(scraping.fight_stat_grabber_a, eventHyperLinks))
 winner_grabber = [event for subList in winner_grabber for event in subList]
 print("We finished winner_grabber")
 
 with ThreadPoolExecutor(10) as executor:
-    all_fighter_stats = list(executor.map(tsum.fight_stat_grabber_b, winner_grabber))
+    all_fighter_stats = list(executor.map(scraping.fight_stat_grabber_b, winner_grabber))
 all_fighter_stats = [event for subList in all_fighter_stats for event in subList]
 
 all_fighter_stats_df = pd.DataFrame(
@@ -239,11 +232,11 @@ cursor.execute(
 )
 
 # Insert the data
-FIGHT_STATS_QUERY = """INSERT INTO fightStats (fighterA, fighterB, fighter_A_KD, fighter_B_KD, fighter_A_sig_strikes, fighter_B_sig_strikes, 
-                                   fighter_A_sig_strike_acc, fighter_B_sig_strike_acc, fighter_A_total_strikes, fighter_B_total_strikes, 
-                                   fighter_A_takedowns, fighter_B_takedowns, fighter_A_takedown_acc, fighter_B_takedown_acc, fighter_A_sub_attempts, 
-                                   fighter_B_sub_attempts, fighter_A_reversal, fighter_B_reversal, fighter_A_control_time, fighter_B_control_time, 
-                                   fighter_A_ID, fighter_B_ID, winner, weightClass, fightURL, eventID, method, time, round) 
+FIGHT_STATS_QUERY = """INSERT INTO fightStats (fighterA, fighterB, fighter_A_KD, fighter_B_KD, fighter_A_sig_strikes, fighter_B_sig_strikes,
+                                   fighter_A_sig_strike_acc, fighter_B_sig_strike_acc, fighter_A_total_strikes, fighter_B_total_strikes,
+                                   fighter_A_takedowns, fighter_B_takedowns, fighter_A_takedown_acc, fighter_B_takedown_acc, fighter_A_sub_attempts,
+                                   fighter_B_sub_attempts, fighter_A_reversal, fighter_B_reversal, fighter_A_control_time, fighter_B_control_time,
+                                   fighter_A_ID, fighter_B_ID, winner, weightClass, fightURL, eventID, method, time, round)
                                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"""
 all_fighter_statsList = all_fighter_stats_df.to_records(index=False).tolist()
 cursor.executemany(FIGHT_STATS_QUERY, all_fighter_statsList)

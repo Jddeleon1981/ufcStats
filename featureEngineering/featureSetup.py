@@ -2,31 +2,22 @@
 This file stores the sql queries that are used to create the features that will be fed into our prediction models.
 """
 
-import json
-from typing import Dict
-import boto3
-from botocore.exceptions import ClientError
 import pandas as pd
 from pandasql import sqldf
 
+from ufcPipeline.secretsManager import get_secret as _get_secret
 
-def get_secret() -> Dict:
-    """Used to retrieve mysql info from aws secrets manager"""
+# Local AWS profile used when exploring from a workstation (see explore.ipynb).
+LOCAL_AWS_PROFILE = "tmpJose"
 
-    secret_name = "ufcDBcred"
-    region_name = "us-west-1"
 
-    # create client
-    session = boto3.session.Session(profile_name="tmpJose")
-    client = session.client(service_name="secretsmanager", region_name=region_name)
-    try:
-        get_secret_value_response = client.get_secret_value(SecretId=secret_name)
-    except ClientError as e:
-        raise e
+def get_secret() -> dict:
+    """Return DB credentials via the shared Secrets Manager helper.
 
-    # format as dict before returning
-    secret = get_secret_value_response["SecretString"]
-    return json.loads(secret)
+    Kept as a thin wrapper so explore.ipynb can call ``fs.get_secret()`` with
+    the local profile already applied.
+    """
+    return _get_secret(profile_name=LOCAL_AWS_PROFILE)
 
 
 def set_up_features(fights_table, fighters_table):
