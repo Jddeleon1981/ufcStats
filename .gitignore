@@ -1,3 +1,13 @@
 ufcENVR/
 66230a7c-ca85-4aa8-9c06-82fed15d0b94/
 localUFCUpdate/
+
+# Python build / cache artifacts
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+build/
+dist/
+.tmpvenv/
