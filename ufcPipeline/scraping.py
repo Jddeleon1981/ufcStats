@@ -4,6 +4,7 @@ The ``parse_*`` functions are pure: they take HTML and return structured data, s
 they can be unit-tested against fixtures without touching the network. The
 ``*_grabber`` / ``scrape_*`` functions wrap them with the actual HTTP requests.
 """
+
 import time
 from typing import List, Tuple
 
@@ -21,9 +22,7 @@ def add_www_to_links(links: List[str]) -> List[str]:
     return [link.replace("http://", "http://www.") for link in links]
 
 
-# ---------------------------------------------------------------------------
-# Pure parsers (unit-tested against fixtures in tests/)
-# ---------------------------------------------------------------------------
+# Pure parsers
 def parse_fighter_links(html) -> List[Tuple[str, str, str]]:
     """Parse the paginated fighter table into (first, last, url) tuples."""
     soup = BeautifulSoup(html, "html.parser")
@@ -148,7 +147,10 @@ def parse_bout(html) -> dict:
         for p in table.find_all("p", class_="b-fight-details__table-text")
     ]
     fighter_urls = add_www_to_links(
-        [link["href"] for link in table.find_all("a", class_="b-link b-link_style_black")]
+        [
+            link["href"]
+            for link in table.find_all("a", class_="b-link b-link_style_black")
+        ]
     )
 
     # method, round, and time live in the summary paragraph below the table
@@ -169,9 +171,7 @@ def parse_bout(html) -> dict:
     }
 
 
-# ---------------------------------------------------------------------------
 # Network-backed scrapers
-# ---------------------------------------------------------------------------
 def hyperlink_grabber(last_name_letter: str) -> List[Tuple[str, str, str]]:
     """Fetch and parse every fighter link for one last-name letter."""
     time.sleep(REQUEST_DELAY_SECONDS)
@@ -255,7 +255,9 @@ def fight_stat_grabber_a(event):
 
     fights = parse_event_fights(response.content)
     if not fights:
-        return [f"This {event_name} didnt have a table to grab. This was the link {event_url}"]
+        return [
+            f"This {event_name} didnt have a table to grab. This was the link {event_url}"
+        ]
 
     # pair the eventID with each fight's winner and link
     return [
@@ -271,7 +273,7 @@ def fight_stat_grabber_b(event_stats):
     with each fighter's URL resolved back to their fighterID.
     """
     # imported lazily so the pure parsers above can be used without boto3/mysql
-    from ufcPipeline.db import connect  # pylint: disable=import-outside-toplevel
+    from ufcPipeline.db import connect
 
     cnx = connect()
     cursor = cnx.cursor()

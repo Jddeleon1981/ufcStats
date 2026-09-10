@@ -1,0 +1,5 @@
+packages:
+  # generate_surrogate_key, unique_combination_of_columns, expression_is_true —
+  # the generic tests and key helpers the conventions doc assumes.
+  - package: dbt-labs/dbt_utils
+    version: [">=1.3.0", "<2.0.0"]

@@ -1,0 +1,40 @@
+# Three targets from day one, so the project is never written against a single
+# warehouse. Point dbt at this file with either:
+#   dbt build --profiles-dir .        (run from the dbt/ directory)
+#   export DBT_PROFILES_DIR=$(pwd)/dbt
+#
+# No secrets live here: the Snowflake target reads every credential from the
+# environment, so this file is safe to commit.
+ufc:
+  target: dev
+
+  outputs:
+    # Local development. A DuckDB file alongside the raw parquet, so models can
+    # read data/raw/**.parquet directly without a load step.
+    dev:
+      type: duckdb
+      path: "../data/ufc_dev.duckdb"
+      threads: 4
+      extensions:
+        - parquet
+
+    # Continuous integration. In-memory, seeded from the committed CSVs, so a
+    # pull request can build and test the whole DAG with no warehouse at all.
+    ci:
+      type: duckdb
+      path: ":memory:"
+      threads: 4
+
+    # Deployed. Snowflake sized for a dataset this small: an XS warehouse that
+    # suspends after a minute, which keeps a weekly `dbt build` down to pennies.
+    prod:
+      type: snowflake
+      account: "{{ env_var('SNOWFLAKE_ACCOUNT') }}"
+      user: "{{ env_var('SNOWFLAKE_USER') }}"
+      password: "{{ env_var('SNOWFLAKE_PASSWORD') }}"
+      role: "{{ env_var('SNOWFLAKE_ROLE', 'UFC_TRANSFORMER') }}"
+      warehouse: "{{ env_var('SNOWFLAKE_WAREHOUSE', 'UFC_WH_XS') }}"
+      database: "{{ env_var('SNOWFLAKE_DATABASE', 'UFC') }}"
+      schema: "{{ env_var('SNOWFLAKE_SCHEMA', 'ANALYTICS') }}"
+      threads: 8
+      client_session_keep_alive: false

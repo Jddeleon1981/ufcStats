@@ -3,6 +3,7 @@
 These run against saved HTML fixtures, so they need no network access and pin
 down the parsing contract the pipeline depends on.
 """
+
 from pathlib import Path
 
 from ufcPipeline.scraping import (
@@ -47,7 +48,9 @@ def test_parse_fighter_stats_maps_titles_to_values():
 def test_parse_fighter_stats_keeps_empty_spacer_key():
     # the page has a blank list item that yields an empty-string key; downstream
     # code explicitly drops it, so this guards that the quirk still exists.
-    stats = parse_fighter_stats(_fixture("fighterStats.html"), "Israel", "Adesanya", "url")
+    stats = parse_fighter_stats(
+        _fixture("fighterStats.html"), "Israel", "Adesanya", "url"
+    )
     assert "" in stats
 
 
@@ -71,7 +74,11 @@ def test_add_www_to_links_inserts_subdomain():
 def test_parse_event_fights_pairs_winner_weightclass_and_link():
     fights = parse_event_fights(_fixture("eventPage.html"))
     assert fights == [
-        ("Israel Adesanya", "Middleweight", "http://ufcstats.com/fight-details/fight111"),
+        (
+            "Israel Adesanya",
+            "Middleweight",
+            "http://ufcstats.com/fight-details/fight111",
+        ),
         # a no contest has no winner, so the flag text stands in for one
         ("nc", "Light Heavyweight", "http://ufcstats.com/fight-details/fight222"),
     ]
@@ -81,7 +88,7 @@ def test_parse_bout_returns_totals_in_page_order():
     bout = parse_bout(_fixture("fightPage.html"))
     assert bout["totals"][:2] == ["Israel Adesanya", "Jon Jones"]
     assert len(bout["totals"]) == 20
-    # values stay exactly as rendered — parsing them is a staging concern
+    # values stay exactly as rendered
     assert bout["totals"][4] == "14 of 31"
     assert bout["totals"][12] == "---"
     assert bout["totals"][19] == "1:06"

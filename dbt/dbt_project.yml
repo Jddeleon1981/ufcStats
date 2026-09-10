@@ -1,0 +1,111 @@
+name: "ufc"
+version: "0.1.0"
+config-version: 2
+
+profile: "ufc"
+
+model-paths: ["models"]
+seed-paths: ["seeds"]
+snapshot-paths: ["snapshots"]
+test-paths: ["tests"]
+macro-paths: ["macros"]
+analysis-paths: ["analyses"]
+
+target-path: "target"
+clean-targets: ["target", "dbt_packages"]
+
+# Layering follows the naming conventions in docs/naming-conventions.md:
+#   staging      one model per source table, renamed and cast, never joined
+#   intermediate the shared building blocks, not exposed to consumers
+#   marts        what anything downstream is allowed to read
+models:
+  ufc:
+    staging:
+      +materialized: view
+      +schema: staging
+    intermediate:
+      +materialized: ephemeral
+      +schema: intermediate
+    marts:
+      +materialized: table
+      +schema: marts
+
+# Seeds are a sampled, referentially complete slice of the raw layer, committed
+# so that `dbt build --target ci` runs with no warehouse and no scrape.
+seeds:
+  ufc:
+    +schema: raw
+    # Raw is text. The source's own strings ("14 of 31", "45%", "---", "0:02")
+    # are preserved exactly and cast in staging, where the cast is testable and
+    # re-runnable. Types are declared rather than inferred because dbt and DuckDB
+    # both guess from a sample and then fail on the first exception -- "45%"
+    # infers as INTEGER, "0:02" as TIME.
+    raw_events:
+      +column_types:
+        event_url: varchar
+        event_name: varchar
+        event_date: varchar
+        event_location: varchar
+        _source_url: varchar
+        _batch_id: varchar
+        _ingested_at: timestamp
+    raw_bouts:
+      +column_types:
+        fighter_a_name: varchar
+        fighter_b_name: varchar
+        fighter_a_knockdowns: varchar
+        fighter_b_knockdowns: varchar
+        fighter_a_sig_strikes: varchar
+        fighter_b_sig_strikes: varchar
+        fighter_a_sig_strike_acc: varchar
+        fighter_b_sig_strike_acc: varchar
+        fighter_a_total_strikes: varchar
+        fighter_b_total_strikes: varchar
+        fighter_a_takedowns: varchar
+        fighter_b_takedowns: varchar
+        fighter_a_takedown_acc: varchar
+        fighter_b_takedown_acc: varchar
+        fighter_a_sub_attempts: varchar
+        fighter_b_sub_attempts: varchar
+        fighter_a_reversals: varchar
+        fighter_b_reversals: varchar
+        fighter_a_control_time: varchar
+        fighter_b_control_time: varchar
+        bout_url: varchar
+        event_url: varchar
+        fighter_a_url: varchar
+        fighter_b_url: varchar
+        winner_name: varchar
+        weight_class: varchar
+        method: varchar
+        finish_round: varchar
+        finish_time: varchar
+        _source_url: varchar
+        _batch_id: varchar
+        _ingested_at: timestamp
+    raw_fighters:
+      +column_types:
+        fighter_url: varchar
+        fighter_name: varchar
+        first_name: varchar
+        last_name: varchar
+        height: varchar
+        weight: varchar
+        reach: varchar
+        stance: varchar
+        dob: varchar
+        sig_strikes_landed_per_min: varchar
+        sig_strike_accuracy: varchar
+        sig_strikes_absorbed_per_min: varchar
+        sig_strike_defense: varchar
+        takedown_average: varchar
+        takedown_accuracy: varchar
+        takedown_defense: varchar
+        submission_average: varchar
+        _source_url: varchar
+        _batch_id: varchar
+        _ingested_at: timestamp
+
+snapshots:
+  ufc:
+    +target_schema: snapshots
