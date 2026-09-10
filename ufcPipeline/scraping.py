@@ -6,7 +6,6 @@ they can be unit-tested against fixtures without touching the network. The
 """
 
 import time
-from typing import List, Tuple
 
 import requests
 from bs4 import BeautifulSoup
@@ -17,13 +16,13 @@ FIGHTERS_URL = "http://www.ufcstats.com/statistics/fighters?char={letter}&page=a
 EVENTS_URL = "http://ufcstats.com/statistics/events/completed?page=all"
 
 
-def add_www_to_links(links: List[str]) -> List[str]:
+def add_www_to_links(links: list[str]) -> list[str]:
     """Insert ``www.`` into bare ufcstats links so requests can resolve them."""
     return [link.replace("http://", "http://www.") for link in links]
 
 
 # Pure parsers
-def parse_fighter_links(html) -> List[Tuple[str, str, str]]:
+def parse_fighter_links(html) -> list[tuple[str, str, str]]:
     """Parse the paginated fighter table into (first, last, url) tuples."""
     soup = BeautifulSoup(html, "html.parser")
     table = soup.find_all("table")[0]
@@ -52,7 +51,7 @@ def parse_fighter_stats(html, first_name, last_name, url) -> dict:
     return stats
 
 
-def parse_events(html) -> List[Tuple[str, str, str, str]]:
+def parse_events(html) -> list[tuple[str, str, str, str]]:
     """Parse the completed-events table into (name, date, location, url) tuples."""
     soup = BeautifulSoup(html, "html.parser")
     table = soup.find("table", {"class": "b-statistics__table-events"})
@@ -77,7 +76,7 @@ def parse_fighter_name(html) -> str:
     return title.get_text(strip=True) if title else ""
 
 
-def parse_event_fights(html) -> List[Tuple[str, str, str]]:
+def parse_event_fights(html) -> list[tuple[str, str, str]]:
     """Parse one event page into (winner, weight class, fight url) per bout."""
     soup = BeautifulSoup(html, "html.parser")
 
@@ -124,7 +123,11 @@ def parse_event_fights(html) -> List[Tuple[str, str, str]]:
             weight_classes.append(weight_class_text)
 
     fight_links = [fight.split("'")[1] for fight in fight_links]
-    return list(zip(winners, weight_classes, fight_links))
+    # strict=True: these three lists are appended under different conditions, so a
+    # divergence means the rows no longer line up. Zipping short would not just
+    # drop bouts, it would pair a bout with the next one's winner -- silent
+    # corruption. Raise instead and let the caller's error handler record it.
+    return list(zip(winners, weight_classes, fight_links, strict=True))
 
 
 def parse_bout(html) -> dict:
@@ -172,7 +175,7 @@ def parse_bout(html) -> dict:
 
 
 # Network-backed scrapers
-def hyperlink_grabber(last_name_letter: str) -> List[Tuple[str, str, str]]:
+def hyperlink_grabber(last_name_letter: str) -> list[tuple[str, str, str]]:
     """Fetch and parse every fighter link for one last-name letter."""
     time.sleep(REQUEST_DELAY_SECONDS)
     response = requests.get(
@@ -181,7 +184,7 @@ def hyperlink_grabber(last_name_letter: str) -> List[Tuple[str, str, str]]:
     return parse_fighter_links(response.content)
 
 
-def fighter_stat_grabber(fighter: Tuple[str, str, str]) -> dict:
+def fighter_stat_grabber(fighter: tuple[str, str, str]) -> dict:
     """Fetch a fighter's detail page and parse their personal stats."""
     time.sleep(REQUEST_DELAY_SECONDS)
     first_name, last_name, url = fighter
@@ -189,7 +192,7 @@ def fighter_stat_grabber(fighter: Tuple[str, str, str]) -> dict:
     return parse_fighter_stats(response.content, first_name, last_name, url)
 
 
-def ufc_event_grabber() -> List[Tuple[str, str, str, str]]:
+def ufc_event_grabber() -> list[tuple[str, str, str, str]]:
     """Fetch and parse every completed UFC event (used by the bulk load)."""
     time.sleep(REQUEST_DELAY_SECONDS)
     response = requests.get(EVENTS_URL, timeout=REQUEST_TIMEOUT)

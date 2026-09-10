@@ -148,8 +148,8 @@ ufcStats/
 │   ├── run.py
 │   └── buildWeb/{routes,forms,__init__}.py + templates/
 ├── tests/                         # pytest suite + HTML fixtures for the parsers
-├── pyproject.toml
-├── requirements.txt
+├── pyproject.toml                 # dependency intent (core + dev/dbt/prod/legacy groups)
+├── uv.lock                        # fully resolved graph, committed
 └── pylintrc
 ```
 
@@ -168,13 +168,22 @@ ufcStats/
 
 ## Running it locally
 
-> Requires Python 3.10+, AWS credentials, and a MySQL instance.
+> Requires [uv](https://docs.astral.sh/uv/). It installs the pinned Python (3.12) itself, so
+> nothing else is needed up front. The legacy AWS/MySQL path below additionally needs AWS
+> credentials and a MySQL instance.
 
 1. **Install dependencies**
    ```bash
-   python -m venv ufcENVR && source ufcENVR/bin/activate   # Windows: ufcENVR\Scripts\activate
-   pip install -r requirements.txt
-   pip install -e .          # makes the shared ufcPipeline package importable everywhere
+   uv sync                    # core + dev + dbt, into .venv, from uv.lock
+   ```
+   `uv sync` creates the virtualenv, installs the exact locked versions, and puts
+   `ufcPipeline` in it as an editable install — no separate `pip install -e .` step.
+   Prefix commands with `uv run` (e.g. `uv run pytest`) and they execute inside that env.
+
+   Optional groups:
+   ```bash
+   uv sync --group prod       # adds dbt-snowflake, for `dbt build --target prod`
+   uv sync --group legacy     # adds Flask / MySQL / boto3 / pandasql for the frozen code below
    ```
 
 2. **Provision credentials.** Create an AWS Secrets Manager secret named `ufcDBcred` (region
@@ -204,8 +213,7 @@ The HTML parsers are covered by unit tests that run against saved fixtures — n
 or database required:
 
 ```bash
-pip install -e . -r requirements-dev.txt
-pytest
+uv run pytest
 ```
 
 ---

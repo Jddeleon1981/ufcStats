@@ -14,7 +14,6 @@ place and keep batches small.
 import hashlib
 import re
 import time
-from typing import Tuple
 
 import requests
 
@@ -37,7 +36,7 @@ def is_challenge(html: str) -> bool:
     return CHALLENGE_MARKER in html
 
 
-def solve_challenge(html: str) -> Tuple[str, int]:
+def solve_challenge(html: str) -> tuple[str, int]:
     """Read the nonce and difficulty off an interstitial and do its work.
 
     Returns the ``(nonce, n)`` pair the server expects back. Difficulty is two

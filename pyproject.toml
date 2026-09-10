@@ -6,10 +6,76 @@ build-backend = "setuptools.build_meta"
 name = "ufc-pipeline"
 version = "0.1.0"
 description = "Shared scraping, parsing, and DB helpers for the UFC stats ETL pipeline."
-requires-python = ">=3.10"
+requires-python = ">=3.12"
 
-[project.optional-dependencies]
-dev = ["pytest>=8.0"]
+# Everything the live pipeline imports directly. requests/bs4 drive the scrape
+# (ufcPipeline/session.py, scraping.py); pandas + pyarrow write and read the
+# partitioned parquet raw layer (ufcPipeline/extract.py).
+dependencies = [
+    "requests>=2.31",
+    "beautifulsoup4>=4.12",
+    # Capped below 3.0 deliberately: the P0 backfill ran on the 2.x line and the
+    # test suite covers the HTML parsers, not the pandas paths. Lift the cap when
+    # P4 gives those real coverage.
+    "pandas>=2.2,<3.0",
+    "pyarrow>=15.0",
+]
+
+[dependency-groups]
+# Tests, linters, and the bootstrap notebook. duckdb is here rather than in
+# `dbt` because extract/bootstrap_raw.ipynb imports it directly for verification
+# queries, independently of dbt-duckdb.
+dev = [
+    "pytest>=8.0",
+    "ruff>=0.6",
+    "mypy>=1.8",
+    "ipykernel>=6.29",
+    "duckdb>=1.5",
+]
+
+# Warehouse + transformation for the dev and ci targets.
+dbt = [
+    "dbt-core~=1.12.3",
+    "dbt-duckdb~=1.11.0",
+]
+
+# Only needed for `dbt build --target prod`. Kept out of dev and ci so neither
+# has to install the Snowflake driver.
+prod = [
+    "dbt-snowflake~=1.12.0",
+]
+
+# Frozen pre-pivot stack: the Flask app (a P8 dbt exposure), the MySQL/RDS
+# helpers, the Lambda, and featureSetup.py. Not installed by default -- use
+# `uv sync --group legacy` when you need to run one of them.
+legacy = [
+    "Flask>=3.0",
+    "Flask-WTF>=1.2",
+    "WTForms>=3.1",
+    "mysql-connector-python>=8.3",
+    "boto3>=1.34",
+    "pandasql>=0.7.3",
+    "numpy>=1.26",
+]
+
+[tool.uv]
+# A bare `uv sync` gives you the working pipeline: core + tests + dbt on DuckDB.
+default-groups = ["dev", "dbt"]
+
+# Replaces the old standalone pylintrc -- Ruff subsumes pylint, flake8, isort and
+# black, and configures here, so the repo keeps one config file instead of two.
+[tool.ruff]
+line-length = 175          # carried over from pylintrc; tighten to 100 if you'd rather
+target-version = "py312"
+# Frozen pre-pivot code. Not linted because it is scheduled for deletion or a
+# rewrite (featureSetup.py is ported to dbt models in P4), not because it passes.
+extend-exclude = ["flaskInt", "SQL", "featureEngineering"]
+
+[tool.ruff.lint]
+# E/W pycodestyle, F pyflakes, I import sorting, UP pyupgrade, B bugbear, SIM simplify.
+# pep8-naming (N) is deliberately off: the old pylintrc set module-naming-style=camelCase,
+# and `ufcPipeline` plus its camelCase modules are intentional.
+select = ["E", "F", "W", "I", "UP", "B", "SIM"]
 
 [tool.setuptools]
 packages = ["ufcPipeline"]

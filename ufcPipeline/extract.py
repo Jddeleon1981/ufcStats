@@ -16,9 +16,9 @@ Every record carries ``_ingested_at``, ``_source_url`` and ``_batch_id``.
 
 import json
 import uuid
-from datetime import date, datetime, timezone
+from collections.abc import Iterable
+from datetime import UTC, date, datetime
 from pathlib import Path
-from typing import Dict, Iterable, List, Optional
 
 import pandas as pd
 
@@ -86,13 +86,13 @@ def _stamp(record: dict, source_url: str, batch_id: str, payload) -> dict:
     """Attach the raw-layer metadata every bronze record carries."""
     record["_source_url"] = source_url
     record["_batch_id"] = batch_id
-    record["_ingested_at"] = datetime.now(timezone.utc)
+    record["_ingested_at"] = datetime.now(UTC)
     record["_raw_payload"] = json.dumps(payload, ensure_ascii=False)
     return record
 
 
 # Entities
-def extract_events(sess, batch_id: str) -> List[dict]:
+def extract_events(sess, batch_id: str) -> list[dict]:
     """Every completed event listed on the site, unfiltered and uncast."""
     response = http.get(sess, EVENTS_URL)
     return [
@@ -114,15 +114,15 @@ def extract_events(sess, batch_id: str) -> List[dict]:
 def select_events(
     events: Iterable[dict],
     since: date = MODERN_ERA_START,
-    until: Optional[date] = None,
-    limit: Optional[int] = None,
-) -> List[dict]:
+    until: date | None = None,
+    limit: int | None = None,
+) -> list[dict]:
     """Modern-era events that have actually happened, newest first.
 
     The events page lists upcoming cards alongside completed ones, so ``until``
     (today by default) is what keeps a card with no results out of the scrape.
     """
-    until = until or datetime.now(timezone.utc).date()
+    until = until or datetime.now(UTC).date()
     selected = []
     for event in events:
         event_date = datetime.strptime(event["event_date"], "%B %d, %Y").date()
@@ -138,7 +138,10 @@ def _bout_record(bout: dict, bout_url: str, event_url: str, fight) -> dict:
     """Flatten one parsed bout into a raw record keyed by the site's own URLs."""
     winner, weight_class, _ = fight
     fighter_urls = bout["fighter_urls"]
-    record = dict(zip(BOUT_TOTALS_COLUMNS, bout["totals"]))
+    # strict=True: the caller already skips totals shorter than the column list,
+    # so a length mismatch here means the page rendered MORE cells than expected.
+    # Truncating those silently would drop scraped stats, so fail loudly instead.
+    record = dict(zip(BOUT_TOTALS_COLUMNS, bout["totals"], strict=True))
     record.update(
         {
             "bout_url": bout_url,
@@ -157,7 +160,7 @@ def _bout_record(bout: dict, bout_url: str, event_url: str, fight) -> dict:
 
 def extract_bouts(
     sess, events: Iterable[dict], batch_id: str, on_error=None
-) -> List[dict]:
+) -> list[dict]:
     """Every bout on the given events, one record per bout.
 
     Failures are isolated per bout: a card with no totals table, or a page that
@@ -189,7 +192,7 @@ def extract_bouts(
     return bouts
 
 
-def fighter_urls_from_bouts(bouts: Iterable[dict]) -> List[str]:
+def fighter_urls_from_bouts(bouts: Iterable[dict]) -> list[str]:
     """The distinct fighters appearing in a set of bouts.
 
     Deriving the fighter list from the bouts rather than the site's A-Z index
@@ -197,7 +200,7 @@ def fighter_urls_from_bouts(bouts: Iterable[dict]) -> List[str]:
     bout points at is one we fetched — and skips thousands of pages for fighters
     who never appear.
     """
-    urls: Dict[str, None] = {}
+    urls: dict[str, None] = {}
     for bout in bouts:
         for key in ("fighter_a_url", "fighter_b_url"):
             if bout.get(key):
@@ -207,7 +210,7 @@ def fighter_urls_from_bouts(bouts: Iterable[dict]) -> List[str]:
 
 def extract_fighters(
     sess, fighter_urls: Iterable[str], batch_id: str, on_error=None
-) -> List[dict]:
+) -> list[dict]:
     """Career-to-date profile for each fighter URL.
 
     These values are a snapshot of what the site shows *today* — they change
@@ -245,7 +248,7 @@ def extract_fighters(
 
 # Landing
 def partition_dir(
-    entity: str, root: Path, partition_date: Optional[date] = None
+    entity: str, root: Path, partition_date: date | None = None
 ) -> Path:
     """The ``dt=`` directory one run's records land in.
 
@@ -253,16 +256,16 @@ def partition_dir(
     full history glob the entity directory and de-duplicate on the natural key,
     which is what dbt staging does.
     """
-    partition_date = partition_date or datetime.now(timezone.utc).date()
+    partition_date = partition_date or datetime.now(UTC).date()
     return Path(root) / entity / f"dt={partition_date.isoformat()}"
 
 
 def write_parquet(
-    records: List[dict],
+    records: list[dict],
     entity: str,
     root: Path,
-    partition_date: Optional[date] = None,
-    part: Optional[str] = None,
+    partition_date: date | None = None,
+    part: str | None = None,
 ) -> Path:
     """Land one entity's records under ``<root>/<entity>/dt=YYYY-MM-DD/``.
 
@@ -285,7 +288,7 @@ def landed_keys(
     entity: str,
     root: Path,
     column: str,
-    partition_date: Optional[date] = None,
+    partition_date: date | None = None,
 ) -> set:
     """Values of ``column`` already written to today's partition.
 

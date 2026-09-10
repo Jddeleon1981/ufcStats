@@ -1,6 +1,5 @@
 """Retrieve the UFC database credentials from AWS Secrets Manager."""
 import json
-from typing import Optional
 
 import boto3
 from botocore.exceptions import ClientError
@@ -10,7 +9,7 @@ DEFAULT_REGION = "us-west-1"
 
 
 def get_secret(
-    profile_name: Optional[str] = None,
+    profile_name: str | None = None,
     secret_name: str = DEFAULT_SECRET_NAME,
     region_name: str = DEFAULT_REGION,
 ) -> dict:
