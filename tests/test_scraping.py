@@ -7,6 +7,8 @@ from pathlib import Path
 
 from ufcPipeline.scraping import (
     add_www_to_links,
+    parse_bout,
+    parse_event_fights,
     parse_events,
     parse_fighter_links,
     parse_fighter_stats,
@@ -64,3 +66,38 @@ def test_parse_events_extracts_rows_and_keeps_apostrophes():
 
 def test_add_www_to_links_inserts_subdomain():
     assert add_www_to_links(["http://ufcstats.com/x"]) == ["http://www.ufcstats.com/x"]
+
+
+def test_parse_event_fights_pairs_winner_weightclass_and_link():
+    fights = parse_event_fights(_fixture("eventPage.html"))
+    assert fights == [
+        ("Israel Adesanya", "Middleweight", "http://ufcstats.com/fight-details/fight111"),
+        # a no contest has no winner, so the flag text stands in for one
+        ("nc", "Light Heavyweight", "http://ufcstats.com/fight-details/fight222"),
+    ]
+
+
+def test_parse_bout_returns_totals_in_page_order():
+    bout = parse_bout(_fixture("fightPage.html"))
+    assert bout["totals"][:2] == ["Israel Adesanya", "Jon Jones"]
+    assert len(bout["totals"]) == 20
+    # values stay exactly as rendered — parsing them is a staging concern
+    assert bout["totals"][4] == "14 of 31"
+    assert bout["totals"][12] == "---"
+    assert bout["totals"][19] == "1:06"
+
+
+def test_parse_bout_extracts_outcome_and_fighter_urls():
+    bout = parse_bout(_fixture("fightPage.html"))
+    assert bout["method"] == "KO/TKO"
+    assert bout["finish_round"] == "1"
+    assert bout["finish_time"] == "2:35"
+    assert bout["fighter_urls"] == [
+        "http://www.ufcstats.com/fighter-details/abc123",
+        "http://www.ufcstats.com/fighter-details/def456",
+    ]
+
+
+def test_parse_bout_returns_empty_when_no_totals_table():
+    # older cards have no box score; callers skip these rather than fail
+    assert parse_bout("<html><body><p>no tables here</p></body></html>") == {}

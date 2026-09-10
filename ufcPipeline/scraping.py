@@ -71,6 +71,104 @@ def parse_events(html) -> List[Tuple[str, str, str, str]]:
     return events
 
 
+def parse_fighter_name(html) -> str:
+    """Pull a fighter's display name off their detail page."""
+    soup = BeautifulSoup(html, "html.parser")
+    title = soup.find("span", class_="b-content__title-highlight")
+    return title.get_text(strip=True) if title else ""
+
+
+def parse_event_fights(html) -> List[Tuple[str, str, str]]:
+    """Parse one event page into (winner, weight class, fight url) per bout."""
+    soup = BeautifulSoup(html, "html.parser")
+
+    # the main fights table lists every bout on the card
+    tables = soup.find_all("table")
+    if not tables:
+        return []
+    rows = tables[0].find_all("tr")
+
+    # collected in parallel lists and zipped, because a row can contribute to
+    # one list without contributing to the others
+    fight_links = []
+    winners = []
+    weight_classes = []
+    for row in rows:
+
+        # rows carry the individual fight page as an onclick handler
+        onclick = row.get("onclick")
+        if onclick:
+            fight_links.append(onclick)
+
+        # find the winner, accounting for no-contest results
+        winner_tag = row.find("a", class_="b-link b-link_style_black")
+        header_tag = row.find("th")
+        nc_tag = row.find("i", class_="b-flag__text")
+        no_contest_tag_text = nc_tag.text.strip() if nc_tag else None
+        if winner_tag and not header_tag:
+            if no_contest_tag_text == "nc":
+                winners.append(no_contest_tag_text)
+            else:
+                winners.append(winner_tag.get_text().strip())
+
+        # the weight class is the 2nd left-aligned column
+        weight_class_tags = row.find_all(
+            "td", class_="b-fight-details__table-col l-page_align_left"
+        )
+        if weight_class_tags and len(weight_class_tags) > 1:
+            weight_class_text = (
+                weight_class_tags[1]
+                .find("p", class_="b-fight-details__table-text")
+                .get_text()
+                .strip()
+            )
+            weight_classes.append(weight_class_text)
+
+    fight_links = [fight.split("'")[1] for fight in fight_links]
+    return list(zip(winners, weight_classes, fight_links))
+
+
+def parse_bout(html) -> dict:
+    """Parse one fight page into its 'Totals' box-score plus the outcome.
+
+    Returns ``{}`` when the page carries no totals table, which happens for
+    older cards. ``totals`` is the table's 20 cells in page order (both fighter
+    names, then each stat as an A/B pair) left exactly as the site renders
+    them — ``"14 of 31"``, ``"---"``, ``"0:02"``. Casting is a staging concern.
+    """
+    soup = BeautifulSoup(html, "html.parser")
+
+    tables = soup.find_all("table")
+    if not tables:
+        return {}
+    table = tables[0]
+
+    totals = [
+        p.get_text(strip=True)
+        for p in table.find_all("p", class_="b-fight-details__table-text")
+    ]
+    fighter_urls = add_www_to_links(
+        [link["href"] for link in table.find_all("a", class_="b-link b-link_style_black")]
+    )
+
+    # method, round, and time live in the summary paragraph below the table
+    text_content = soup.find("p", class_="b-fight-details__text")
+    method_tag = text_content.find("i", class_="b-fight-details__text-item_first")
+    method = method_tag.find("i", style="font-style: normal").get_text(strip=True)
+    finish_round = method_tag.find_next_sibling("i").get_text(strip=True).split(":")[1]
+
+    time_tag = text_content.find("i", class_="b-fight-details__text-item")
+    finish_time = time_tag.find_next_sibling("i").get_text(strip=True).split(":", 1)[1]
+
+    return {
+        "totals": totals,
+        "fighter_urls": fighter_urls,
+        "method": method,
+        "finish_round": finish_round,
+        "finish_time": finish_time,
+    }
+
+
 # ---------------------------------------------------------------------------
 # Network-backed scrapers
 # ---------------------------------------------------------------------------
@@ -149,78 +247,29 @@ def fight_stat_grabber_a(event):
     heavy and dropped rows mid-run. Part A walks an event page and returns one
     tuple per fight on the card.
     """
-    # complex page parse: many fields are pulled into locals here
-    # pylint: disable=too-many-locals
     time.sleep(REQUEST_DELAY_SECONDS)
     event_id = event[0]
     event_name = event[1]
     event_url = event[4]
     response = requests.get(event_url, timeout=REQUEST_TIMEOUT)
-    soup = BeautifulSoup(response.content, "html.parser")
 
-    # grab the main fights table, which lists every fight at this event
-    tables = soup.find_all("table")
-    if not tables:
+    fights = parse_event_fights(response.content)
+    if not fights:
         return [f"This {event_name} didnt have a table to grab. This was the link {event_url}"]
-    table = tables[0]
-    rows = table.find_all("tr")
-
-    # collect the on-click fight links, winners, and weight classes per row
-    fight_links = []
-    winners = []
-    weight_classes = []
-    for row in rows:
-
-        # rows carry the individual fight page as an onclick handler
-        onclick = row.get("onclick")
-        if onclick:
-            fight_links.append(onclick)
-
-        # find the winner, accounting for no-contest results
-        winner_tag = row.find("a", class_="b-link b-link_style_black")
-        header_tag = row.find("th")
-        nc_tag = row.find("i", class_="b-flag__text")
-        try:
-            no_contest_tag_text = nc_tag.text.strip()
-        except AttributeError:
-            no_contest_tag_text = None
-        if winner_tag and not header_tag and no_contest_tag_text != "nc":
-            winner = winner_tag.get_text().strip()
-            winners.append(winner)
-        elif winner_tag and not header_tag and no_contest_tag_text == "nc":
-            winner = nc_tag.text.strip()
-            winners.append(winner)
-
-        # the weight class is the 2nd left-aligned column
-        weight_class_tags = row.find_all(
-            "td", class_="b-fight-details__table-col l-page_align_left"
-        )
-        if weight_class_tags and len(weight_class_tags) > 1:
-            weight_class_tag = weight_class_tags[1]
-            weight_class_text = (
-                weight_class_tag.find("p", class_="b-fight-details__table-text")
-                .get_text()
-                .strip()
-            )
-            weight_classes.append(weight_class_text)
 
     # pair the eventID with each fight's winner and link
-    fight_links = [fight.split("'")[1] for fight in fight_links]
-    winner_and_link = list(zip(winners, weight_classes, fight_links))
-    event_stats = [
-        (winner, weight_class, link, event_id)
-        for winner, weight_class, link in winner_and_link
+    return [
+        (winner, weight_class, link, event_id) for winner, weight_class, link in fights
     ]
-    return event_stats
 
 
 def fight_stat_grabber_b(event_stats):
     """Scrape the per-fight 'Totals' box-score for one fight.
 
     Part B acts on each tuple produced by :func:`fight_stat_grabber_a`
-    (winner, weight class, fight link, eventID) and returns the full stat row.
+    (winner, weight class, fight link, eventID) and returns the full stat row,
+    with each fighter's URL resolved back to their fighterID.
     """
-    # pylint: disable=too-many-locals
     # imported lazily so the pure parsers above can be used without boto3/mysql
     from ufcPipeline.db import connect  # pylint: disable=import-outside-toplevel
 
@@ -231,46 +280,22 @@ def fight_stat_grabber_b(event_stats):
         f"started fightStats for {event_stats[0]} at event with eventID:{event_stats[3]}"
     )
     time.sleep(REQUEST_DELAY_SECONDS)
-    fight_stats = []
     fight_link = event_stats[2]
-
-    # navigate to the page for this fight
     response = requests.get(fight_link, timeout=REQUEST_TIMEOUT)
-    soup = BeautifulSoup(response.content, "html.parser")
+    bout = parse_bout(response.content)
 
-    # grab the stat info if the totals table is present
-    tables = soup.find_all("table")
-    if tables:
-        table = tables[0]
-        stats = table.find_all("p", class_="b-fight-details__table-text")
-        current_fight = [p.get_text(strip=True) for p in stats]
-
-        # resolve each fighter's URL back to their fighterID
-        hyperlinks = table.find_all("a", class_="b-link b-link_style_black")
-        hyperlinks = [link["href"] for link in hyperlinks]
-        hyperlinks = add_www_to_links(hyperlinks)
-        fighter_ids = [fighter_id_grabber(hyperlink, cursor) for hyperlink in hyperlinks]
-
-        current_fight.extend(fighter_ids)
-        current_fight.extend(list(event_stats))
-    else:
+    if not bout:
         cursor.close()
         cnx.close()
         return []
 
-    # scrape the method, time, and round the fight ended in
-    text_content = soup.find("p", class_="b-fight-details__text")
-    method_tag = text_content.find("i", class_="b-fight-details__text-item_first")
-    result = method_tag.find("i", style="font-style: normal").get_text(strip=True)
-    round_number = method_tag.find_next_sibling("i").get_text(strip=True)
-    round_number = round_number.split(":")[1]
-
-    time_tag = text_content.find("i", class_="b-fight-details__text-item")
-    time_result = time_tag.find_next_sibling("i").get_text(strip=True)
-    time_result = time_result.split(":", 1)[1]
-    current_fight.extend([result, time_result, round_number])
-    fight_stats.append(current_fight)
+    current_fight = list(bout["totals"])
+    current_fight.extend(
+        fighter_id_grabber(hyperlink, cursor) for hyperlink in bout["fighter_urls"]
+    )
+    current_fight.extend(list(event_stats))
+    current_fight.extend([bout["method"], bout["finish_time"], bout["finish_round"]])
 
     cursor.close()
     cnx.close()
-    return fight_stats
+    return [current_fight]

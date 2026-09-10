@@ -1,0 +1,57 @@
+<html>
+  <body>
+    <table class="b-fight-details__table">
+      <thead>
+        <tr class="b-fight-details__table-row">
+          <th class="b-fight-details__table-col">W/L</th>
+          <th class="b-fight-details__table-col">Fighter</th>
+          <th class="b-fight-details__table-col">Weight class</th>
+        </tr>
+      </thead>
+      <tbody>
+        <!-- a normal win: the winner is listed first -->
+        <tr class="b-fight-details__table-row" onclick="doNav('http://ufcstats.com/fight-details/fight111')">
+          <td class="b-fight-details__table-col b-fight-details__table-col_style_align-top">
+            <p class="b-fight-details__table-text">
+              <a class="b-flag b-flag_style_green" href="http://ufcstats.com/fight-details/fight111">
+                <i class="b-flag__inner"><i class="b-flag__text">win</i></i>
+              </a>
+            </p>
+          </td>
+          <td class="b-fight-details__table-col l-page_align_left">
+            <p class="b-fight-details__table-text">
+              <a class="b-link b-link_style_black" href="http://ufcstats.com/fighter-details/abc123">Israel Adesanya</a>
+            </p>
+            <p class="b-fight-details__table-text">
+              <a class="b-link b-link_style_black" href="http://ufcstats.com/fighter-details/def456">Jon Jones</a>
+            </p>
+          </td>
+          <td class="b-fight-details__table-col l-page_align_left">
+            <p class="b-fight-details__table-text">Middleweight</p>
+          </td>
+        </tr>
+        <!-- a no contest: the flag reads "nc" and stands in for the winner -->
+        <tr class="b-fight-details__table-row" onclick="doNav('http://ufcstats.com/fight-details/fight222')">
+          <td class="b-fight-details__table-col b-fight-details__table-col_style_align-top">
+            <p class="b-fight-details__table-text">
+              <a class="b-flag b-flag_style_bordered" href="http://ufcstats.com/fight-details/fight222">
+                <i class="b-flag__inner"><i class="b-flag__text">nc</i></i>
+              </a>
+            </p>
+          </td>
+          <td class="b-fight-details__table-col l-page_align_left">
+            <p class="b-fight-details__table-text">
+              <a class="b-link b-link_style_black" href="http://ufcstats.com/fighter-details/ghi789">Alex Pereira</a>
+            </p>
+            <p class="b-fight-details__table-text">
+              <a class="b-link b-link_style_black" href="http://ufcstats.com/fighter-details/jkl012">Jamahal Hill</a>
+            </p>
+          </td>
+          <td class="b-fight-details__table-col l-page_align_left">
+            <p class="b-fight-details__table-text">Light Heavyweight</p>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </body>
+</html>
