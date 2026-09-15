@@ -3,7 +3,7 @@
 #   dbt build --profiles-dir .        (run from the dbt/ directory)
 #   export DBT_PROFILES_DIR=$(pwd)/dbt
 #
-# No secrets live here: the Snowflake target reads every credential from the
+# No secrets live here: the prod target reads every credential from the
 # environment, so this file is safe to commit.
 ufc:
   target: dev
@@ -25,16 +25,27 @@ ufc:
       path: ":memory:"
       threads: 4
 
-    # Deployed. Snowflake sized for a dataset this small: an XS warehouse that
-    # suspends after a minute, which keeps a weekly `dbt build` down to pennies.
+    # Deployed. Databricks on Free Edition, which is serverless-only and has no
+    # trial clock -- unlike a Snowflake trial, the published project does not go
+    # dark after 30 days. Free Edition gives you one pre-created "Serverless
+    # Starter Warehouse" and will not let you make another, so http_path points
+    # at that one.
+    #
+    # Where each value comes from:
+    #   DATABRICKS_HOST       workspace URL without the scheme
+    #                         e.g. dbc-1234abcd-5678.cloud.databricks.com
+    #   DATABRICKS_HTTP_PATH  SQL Warehouses -> Serverless Starter Warehouse ->
+    #                         Connection details -> HTTP path
+    #   DATABRICKS_TOKEN      Settings -> Developer -> Access tokens -> Generate
+    #
+    # `catalog` is Unity Catalog's extra namespace level: Databricks addresses a
+    # table as catalog.schema.table where Snowflake uses database.schema.table.
+    # Free Edition requires Unity Catalog, so this is not optional.
     prod:
-      type: snowflake
-      account: "{{ env_var('SNOWFLAKE_ACCOUNT') }}"
-      user: "{{ env_var('SNOWFLAKE_USER') }}"
-      password: "{{ env_var('SNOWFLAKE_PASSWORD') }}"
-      role: "{{ env_var('SNOWFLAKE_ROLE', 'UFC_TRANSFORMER') }}"
-      warehouse: "{{ env_var('SNOWFLAKE_WAREHOUSE', 'UFC_WH_XS') }}"
-      database: "{{ env_var('SNOWFLAKE_DATABASE', 'UFC') }}"
-      schema: "{{ env_var('SNOWFLAKE_SCHEMA', 'ANALYTICS') }}"
+      type: databricks
+      host: "{{ env_var('DATABRICKS_HOST') }}"
+      http_path: "{{ env_var('DATABRICKS_HTTP_PATH') }}"
+      token: "{{ env_var('DATABRICKS_TOKEN') }}"
+      catalog: "{{ env_var('DATABRICKS_CATALOG', 'ufc') }}"
+      schema: "{{ env_var('DATABRICKS_SCHEMA', 'analytics') }}"
       threads: 8
-      client_session_keep_alive: false

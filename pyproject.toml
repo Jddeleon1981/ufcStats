@@ -40,9 +40,9 @@ dbt = [
 ]
 
 # Only needed for `dbt build --target prod`. Kept out of dev and ci so neither
-# has to install the Snowflake driver.
+# has to install the Databricks driver.
 prod = [
-    "dbt-snowflake~=1.12.0",
+    "dbt-databricks~=1.12.5",
 ]
 
 # Frozen pre-pivot stack: the Flask app (a P8 dbt exposure), the MySQL/RDS
