@@ -1,18 +1,13 @@
-"""Scraping and parsing helpers for ufcstats.com.
+"""Pure HTML parsers for ufcstats.com.
 
-The ``parse_*`` functions are pure: they take HTML and return structured data, so
-they can be unit-tested against fixtures without touching the network. The
-``*_grabber`` / ``scrape_*`` functions wrap them with the actual HTTP requests.
+Every function here takes HTML and returns structured data, so it can be
+unit-tested against the fixtures in ``tests/fixtures`` without touching the
+network. Fetching lives in :mod:`ufcPipeline.session`; turning parsed pages
+into raw records lives in :mod:`ufcPipeline.extract`.
 """
 
-import time
-
-import requests
 from bs4 import BeautifulSoup
 
-REQUEST_TIMEOUT = 25
-REQUEST_DELAY_SECONDS = 1
-FIGHTERS_URL = "http://www.ufcstats.com/statistics/fighters?char={letter}&page=all"
 EVENTS_URL = "http://ufcstats.com/statistics/events/completed?page=all"
 
 
@@ -172,135 +167,3 @@ def parse_bout(html) -> dict:
         "finish_round": finish_round,
         "finish_time": finish_time,
     }
-
-
-# Network-backed scrapers
-def hyperlink_grabber(last_name_letter: str) -> list[tuple[str, str, str]]:
-    """Fetch and parse every fighter link for one last-name letter."""
-    time.sleep(REQUEST_DELAY_SECONDS)
-    response = requests.get(
-        FIGHTERS_URL.format(letter=last_name_letter), timeout=REQUEST_TIMEOUT
-    )
-    return parse_fighter_links(response.content)
-
-
-def fighter_stat_grabber(fighter: tuple[str, str, str]) -> dict:
-    """Fetch a fighter's detail page and parse their personal stats."""
-    time.sleep(REQUEST_DELAY_SECONDS)
-    first_name, last_name, url = fighter
-    response = requests.get(url, timeout=REQUEST_TIMEOUT)
-    return parse_fighter_stats(response.content, first_name, last_name, url)
-
-
-def ufc_event_grabber() -> list[tuple[str, str, str, str]]:
-    """Fetch and parse every completed UFC event (used by the bulk load)."""
-    time.sleep(REQUEST_DELAY_SECONDS)
-    response = requests.get(EVENTS_URL, timeout=REQUEST_TIMEOUT)
-    return parse_events(response.text)
-
-
-def scrape_fighter_data(url):
-    """Scrape (fighter name, url) pairs from a single event's fight table."""
-    response = requests.get(url, timeout=REQUEST_TIMEOUT)
-    soup = BeautifulSoup(response.content, "html.parser")
-
-    # grab the main fights table, which lists every fight at this event
-    tables = soup.find_all("table")
-    if not tables:
-        return [f"This  didnt have a table to grab. This was the link {url}"]
-    table = tables[0]
-    rows = table.find_all("tr")
-
-    fight_links = []
-    for row in rows:
-        # the fighter names live in the first left-aligned column of each row
-        fighter_row_tags = row.find_all(
-            "td", class_="b-fight-details__table-col l-page_align_left"
-        )
-        if fighter_row_tags and len(fighter_row_tags) > 1:
-            fighter_name_tag = fighter_row_tags[0]
-            fighter_name_text = fighter_name_tag.find_all(
-                "p", class_="b-fight-details__table-text"
-            )
-            for tag in fighter_name_text:
-                a_tag = tag.find("a")
-                fighter_name = a_tag.text.strip()
-                fighter_url = a_tag["href"]
-                fight_links.append((fighter_name, fighter_url))
-    return fight_links
-
-
-def fighter_id_grabber(link, cursor):
-    """Look up a fighter's primary key (fighterID) by their detail-page URL."""
-    # NOTE: still string-formatted; parameterizing this is the separate SQL-safety task.
-    query = f"""
-    select fighterID
-    FROM fighterHyperlinks
-    where hyperlink = '{link}'
-    """
-    cursor.execute(query)
-    result = cursor.fetchall()
-    return result[0][0]
-
-
-def fight_stat_grabber_a(event):
-    """Scrape every fight (winner, weight class, link, eventID) at one event.
-
-    Split from the original single grabber because the combined version was too
-    heavy and dropped rows mid-run. Part A walks an event page and returns one
-    tuple per fight on the card.
-    """
-    time.sleep(REQUEST_DELAY_SECONDS)
-    event_id = event[0]
-    event_name = event[1]
-    event_url = event[4]
-    response = requests.get(event_url, timeout=REQUEST_TIMEOUT)
-
-    fights = parse_event_fights(response.content)
-    if not fights:
-        return [
-            f"This {event_name} didnt have a table to grab. This was the link {event_url}"
-        ]
-
-    # pair the eventID with each fight's winner and link
-    return [
-        (winner, weight_class, link, event_id) for winner, weight_class, link in fights
-    ]
-
-
-def fight_stat_grabber_b(event_stats):
-    """Scrape the per-fight 'Totals' box-score for one fight.
-
-    Part B acts on each tuple produced by :func:`fight_stat_grabber_a`
-    (winner, weight class, fight link, eventID) and returns the full stat row,
-    with each fighter's URL resolved back to their fighterID.
-    """
-    # imported lazily so the pure parsers above can be used without boto3/mysql
-    from ufcPipeline.db import connect
-
-    cnx = connect()
-    cursor = cnx.cursor()
-
-    print(
-        f"started fightStats for {event_stats[0]} at event with eventID:{event_stats[3]}"
-    )
-    time.sleep(REQUEST_DELAY_SECONDS)
-    fight_link = event_stats[2]
-    response = requests.get(fight_link, timeout=REQUEST_TIMEOUT)
-    bout = parse_bout(response.content)
-
-    if not bout:
-        cursor.close()
-        cnx.close()
-        return []
-
-    current_fight = list(bout["totals"])
-    current_fight.extend(
-        fighter_id_grabber(hyperlink, cursor) for hyperlink in bout["fighter_urls"]
-    )
-    current_fight.extend(list(event_stats))
-    current_fight.extend([bout["method"], bout["finish_time"], bout["finish_round"]])
-
-    cursor.close()
-    cnx.close()
-    return [current_fight]

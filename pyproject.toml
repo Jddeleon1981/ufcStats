@@ -69,7 +69,7 @@ line-length = 175          # carried over from pylintrc; tighten to 100 if you'd
 target-version = "py312"
 # Frozen pre-pivot code. Not linted because it is scheduled for deletion or a
 # rewrite (featureSetup.py is ported to dbt models in P4), not because it passes.
-extend-exclude = ["flaskInt", "SQL", "featureEngineering"]
+extend-exclude = ["flaskInt", "featureEngineering"]
 
 [tool.ruff.lint]
 # E/W pycodestyle, F pyflakes, I import sorting, UP pyupgrade, B bugbear, SIM simplify.
