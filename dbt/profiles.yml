@@ -18,11 +18,18 @@ ufc:
       extensions:
         - parquet
 
-    # Continuous integration. In-memory, seeded from the committed CSVs, so a
-    # pull request can build and test the whole DAG with no warehouse at all.
+    # Continuous integration. A throwaway file under target/, seeded from the
+    # committed CSVs, so a pull request builds and tests the whole DAG with no
+    # warehouse and no scrape. target/ is gitignored and dbt clean wipes it, so
+    # every run still starts from nothing.
+    #
+    # Run it as two commands -- `dbt seed` then `dbt build`:
+    # source tests have no dependency edge on seeds, so a single `dbt build`
+    # races them and the tests can hit raw.bouts before the seed creates it.
+    # A file rather than :memory: is what lets the two invocations share state.
     ci:
       type: duckdb
-      path: ":memory:"
+      path: "target/ci.duckdb"
       threads: 4
 
     # Deployed. Databricks on Free Edition, which is serverless-only and has no

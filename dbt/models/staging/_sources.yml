@@ -1,0 +1,72 @@
+version: 2
+
+sources:
+  - name: raw
+    schema: raw
+    description: >
+      The bronze layer: ufcstats.com as scraped, with nothing cast or cleaned.
+      Values are the site's own strings -- "14 of 31", "45%", "---", "0:02" --
+      because parsing them is staging's job, where it is testable and can be
+      re-run without scraping again.
+
+      Built by `ufcPipeline/load.py` on dev and prod, and by dbt seeds on ci.
+      Same table names either way, so every model below is target-agnostic.
+
+    # _ingested_at is stamped by ufcPipeline/extract.py when the page was
+    # scraped, not when it was loaded, so freshness measures the age of the
+    # data rather than the age of the last load.
+    loaded_at_field: _ingested_at
+    freshness:
+      # The UFC runs roughly weekly, so 8 days means a card was probably missed
+      # and 30 means the pipeline has stopped.
+      warn_after: { count: 8, period: day }
+      error_after: { count: 30, period: day }
+
+    tables:
+      - name: events
+        description: One row per event listing, including cards that have not happened yet.
+        columns:
+          - name: event_url
+            description: Natural key -- the ufcstats.com detail URL.
+            data_tests: [not_null]
+          - name: event_date
+            description: 'Unparsed, as rendered: "September 05, 2026".'
+            data_tests: [not_null]
+
+      - name: bouts
+        description: >
+          One row per bout per scrape. Deliberately not unique on bout_url:
+          re-scraping appends a new version rather than updating in place, so a
+          bout that appears in two runs has two rows here. Collapsing to the
+          latest row per key happens in staging.
+        columns:
+          - name: bout_url
+            description: Natural key of the bout. Unique per scrape, not across scrapes.
+            data_tests: [not_null]
+          - name: event_url
+            description: The card this bout was on.
+            data_tests: [not_null]
+          - name: fighter_a_url
+            description: Corner A, keyed by the fighter's detail URL.
+            data_tests: [not_null]
+          - name: fighter_b_url
+            description: Corner B, keyed by the fighter's detail URL.
+            data_tests: [not_null]
+
+      - name: fighters
+        description: >
+          Career-to-date profile as the site showed it at scrape time. These
+          values change after every bout and the site overwrites them, which is
+          why each scrape appends a new version -- the P3 snapshot turns that
+          into history.
+        columns:
+          - name: fighter_url
+            description: Natural key -- the ufcstats.com detail URL.
+            data_tests: [not_null]
+
+  # Every raw table also carries the four columns extract.py stamps on: the
+  # three below plus _raw_payload, the unparsed source values as JSON, so a
+  # parsing rule can be corrected and replayed without re-scraping.
+  #   _ingested_at  when the page was scraped (drives freshness above)
+  #   _source_url   the exact page it came from
+  #   _batch_id     ties every record from one extraction run together

@@ -35,12 +35,17 @@ models:
 seeds:
   ufc:
     +schema: raw
+    # CI only. On dev and prod the same tables are built by ufcPipeline/load.py
+    # from the real parquet, and a seed run would replace 9,135 bout rows with
+    # the 922-row sample. Enabling per target is what lets one sources.yml serve
+    # every target: raw.bouts is seeded here, loaded there, same name either way.
+    +enabled: "{{ target.name == 'ci' }}"
     # Raw is text. The source's own strings ("14 of 31", "45%", "---", "0:02")
     # are preserved exactly and cast in staging, where the cast is testable and
     # re-runnable. Types are declared rather than inferred because dbt and DuckDB
     # both guess from a sample and then fail on the first exception -- "45%"
     # infers as INTEGER, "0:02" as TIME.
-    raw_events:
+    events:
       +column_types:
         event_url: varchar
         event_name: varchar
@@ -49,7 +54,7 @@ seeds:
         _source_url: varchar
         _batch_id: varchar
         _ingested_at: timestamp
-    raw_bouts:
+    bouts:
       +column_types:
         fighter_a_name: varchar
         fighter_b_name: varchar
@@ -83,7 +88,7 @@ seeds:
         _source_url: varchar
         _batch_id: varchar
         _ingested_at: timestamp
-    raw_fighters:
+    fighters:
       +column_types:
         fighter_url: varchar
         fighter_name: varchar
