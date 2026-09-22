@@ -1,31 +1,27 @@
 """Load the parquet raw layer into ``raw.*`` tables.
 
 This is where we start loading data. We know partitioned parquet files are written
-under data/raw/<entity>/dt=YYYY-MM-DD/ si this module appends those files into
+under data/raw/<entity>/dt=YYYY-MM-DD/ so this module appends those files into
 warehouse tables that dbt declares as sources. We hold back from applying any
 transformations so each table here is of a "bronze" type plus a "dt" column
-taken from the path
+taken from the path.
 
-
-Remember that idempotency is per file, not per partition. This is because patition
+Remember that idempotency is per file, not per partition. This is because partition
 level can fail when it only loads a subset of the available files. Upon revisiting
 we will see that the current date has been handled and move on labeling it a success.
 
-Wheras, with idempotency tracked at the file level, we can safely retry individual files
+Whereas, with idempotency tracked at the file level, we can safely retry individual files
 without affecting the rest of the partition. If the first run only loads a subset of the
 actual files it's okay because we will revisit the unloaded files on the next run.
 
-This means means a re run will skip what alreary landed. A crash mid file leaves
-no rows or log entrt so the next run will retry instead of double loading. Finally,
+This means a re run will skip what already landed. A crash mid-file leaves
+no rows or log entry so the next run will retry instead of double loading. Finally,
 a partition that gains files later on, like through a resumed backfill, picks up
 only the new ones.
 
-Databricks has the "COPY INTO" command for loading data into tables from files and
-has some of this functionality natively built in. We'll be able to take advantage of
-this later when loading into prod.
-
-Databricks' ``COPY INTO`` does exactly this natively with its own file
-tracking; the prod load in a later phase is that statement over a Volume.
+Databricks has a "COPY INTO" command that does all of this natively, with its own
+file tracking. We'll be able to take advantage of it when loading into prod: that
+load, in a later phase, is that statement over a Volume.
 """
 
 from __future__ import annotations
@@ -53,7 +49,7 @@ class LoadResult:
 
 def _ensure_schema(con: duckdb.DuckDBPyConnection) -> None:
     """
-    Ensure the raw schema exists. Creates the load log table if it doesn't exists so we
+    Ensure the raw schema exists. Creates the load log table if it doesn't exist so we
     have a place to track loaded files.
     """
     con.execute(f"CREATE SCHEMA IF NOT EXISTS {RAW_SCHEMA}")
