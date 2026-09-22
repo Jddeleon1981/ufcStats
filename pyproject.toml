@@ -10,7 +10,8 @@ requires-python = ">=3.12"
 
 # Everything the live pipeline imports directly. requests/bs4 drive the scrape
 # (ufcPipeline/session.py, scraping.py); pandas + pyarrow write and read the
-# partitioned parquet raw layer (ufcPipeline/extract.py).
+# partitioned parquet raw layer (ufcPipeline/extract.py); duckdb is the local
+# warehouse the load step appends into (ufcPipeline/load.py).
 dependencies = [
     "requests>=2.31",
     "beautifulsoup4>=4.12",
@@ -19,18 +20,16 @@ dependencies = [
     # P4 gives those real coverage.
     "pandas>=2.2,<3.0",
     "pyarrow>=15.0",
+    "duckdb>=1.5",
 ]
 
 [dependency-groups]
-# Tests, linters, and the bootstrap notebook. duckdb is here rather than in
-# `dbt` because extract/bootstrap_raw.ipynb imports it directly for verification
-# queries, independently of dbt-duckdb.
+# Tests, linters, and the bootstrap notebook.
 dev = [
     "pytest>=8.0",
     "ruff>=0.6",
     "mypy>=1.8",
     "ipykernel>=6.29",
-    "duckdb>=1.5",
 ]
 
 # Warehouse + transformation for the dev and ci targets.

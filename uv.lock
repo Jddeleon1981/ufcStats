@@ -9,10 +9,10 @@ resolution-markers = [
     "python_full_version == '3.14.*' and sys_platform == 'emscripten'",
     "python_full_version == '3.14.*' and sys_platform != 'emscripten' and sys_platform != 'win32'",
     "python_full_version == '3.13.*' and sys_platform == 'win32'",
-    "python_full_version < '3.13' and sys_platform == 'win32'",
     "python_full_version == '3.13.*' and sys_platform == 'emscripten'",
-    "python_full_version < '3.13' and sys_platform == 'emscripten'",
     "python_full_version == '3.13.*' and sys_platform != 'emscripten' and sys_platform != 'win32'",
+    "python_full_version < '3.13' and sys_platform == 'win32'",
+    "python_full_version < '3.13' and sys_platform == 'emscripten'",
     "python_full_version < '3.13' and sys_platform != 'emscripten' and sys_platform != 'win32'",
 ]
 
@@ -2660,6 +2660,7 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "beautifulsoup4" },
+    { name = "duckdb" },
     { name = "pandas" },
     { name = "pyarrow" },
     { name = "requests" },
@@ -2671,7 +2672,6 @@ dbt = [
     { name = "dbt-duckdb" },
 ]
 dev = [
-    { name = "duckdb" },
     { name = "ipykernel" },
     { name = "mypy" },
     { name = "pytest" },
@@ -2693,6 +2693,7 @@ prod = [
 [package.metadata]
 requires-dist = [
     { name = "beautifulsoup4", specifier = ">=4.12" },
+    { name = "duckdb", specifier = ">=1.5" },
     { name = "pandas", specifier = ">=2.2,<3.0" },
     { name = "pyarrow", specifier = ">=15.0" },
     { name = "requests", specifier = ">=2.31" },
@@ -2704,7 +2705,6 @@ dbt = [
     { name = "dbt-duckdb", specifier = "~=1.11.0" },
 ]
 dev = [
-    { name = "duckdb", specifier = ">=1.5" },
     { name = "ipykernel", specifier = ">=6.29" },
     { name = "mypy", specifier = ">=1.8" },
     { name = "pytest", specifier = ">=8.0" },
