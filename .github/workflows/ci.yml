@@ -1,0 +1,63 @@
+name: CI
+
+# Runs on every pull request, and again on main after a merge so the merged
+# result is verified rather than just the branch that was reviewed.
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+# A new push to the same branch cancels the run still going for the old one.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# Least privilege: this workflow only reads the repository.
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: lint, tests, dbt build
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+
+      # --locked fails if uv.lock has drifted from pyproject.toml, so a
+      # dependency change that was not locked cannot reach main.
+      - name: Install dependencies
+        run: uv sync --locked
+
+      - name: Lint
+        run: uv run ruff check .
+
+      - name: Python tests
+        run: uv run pytest -q
+
+      - name: Install dbt packages
+        working-directory: dbt
+        run: uv run dbt deps --profiles-dir .
+
+      # Seed and build are two commands on purpose. Source tests have no
+      # dependency edge on seeds, so a single `dbt build` races them and the
+      # tests can hit raw.bouts before the seed creates it. The ci target is a
+      # throwaway DuckDB file under target/, created fresh on every run.
+      - name: Seed the raw layer
+        working-directory: dbt
+        run: uv run dbt seed --profiles-dir . --target ci
+
+      - name: Build and test every model
+        working-directory: dbt
+        run: uv run dbt build --profiles-dir . --target ci
+
+      # `dbt source freshness` is deliberately not run here. The seeds carry a
+      # fixed _ingested_at from the scrape that produced them, so freshness
+      # would pass today and start failing on its own as the file ages.
+      # Freshness belongs against real sources on dev and prod.
