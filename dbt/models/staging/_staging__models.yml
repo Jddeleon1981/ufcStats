@@ -1,0 +1,98 @@
+version: 2
+
+models:
+  - name: stg_ufcstats__events
+    description: >
+      One row per event, deduplicated to the latest scrape. Includes upcoming
+      cards, which have no bouts attached until they happen.
+    columns:
+      - name: event_url
+        description: Natural key. Unique here, unlike in the source.
+        data_tests: [unique, not_null]
+      - name: event_date
+        description: Parsed from "September 05, 2026".
+        data_tests: [not_null]
+      - name: event_city
+        data_tests: [not_null]
+      - name: event_country
+        description: Always the last comma-separated part of the location.
+        data_tests: [not_null]
+      - name: event_state
+        description: Null where the source gives only city and country.
+
+  - name: stg_ufcstats__bouts
+    description: >
+      One row per bout, both corners side by side, deduplicated to the latest
+      scrape. Values are cast; the shape still matches the source.
+    columns:
+      - name: bout_url
+        description: Natural key. Unique here, unlike in the source.
+        data_tests: [unique, not_null]
+      - name: event_url
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_ufcstats__events')
+                field: event_url
+      - name: fighter_a_url
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_ufcstats__fighters')
+                field: fighter_url
+      - name: fighter_b_url
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_ufcstats__fighters')
+                field: fighter_url
+      - name: winner_fighter_url
+        description: >
+          The winning corner's url, or null for a no contest. Never a fighter
+          who was not in the bout -- that is asserted by a singular test rather
+          than a generic one, because it compares three columns.
+      - name: is_no_contest
+        data_tests: [not_null]
+      - name: is_finish
+        description: >
+          True for KO/TKO and submission, false for decisions, null for
+          Overturned, DQ and Could Not Continue, which are neither.
+      - name: finish_round
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [1, 2, 3, 4, 5]
+                quote: false
+      - name: finish_time_seconds
+        description: Seconds into the final round, parsed from "2:35".
+        data_tests: [not_null]
+      - name: method
+        data_tests: [not_null]
+
+  - name: stg_ufcstats__fighters
+    description: >
+      One row per fighter, deduplicated to the latest scrape. Career figures
+      are as of that scrape, not as of any particular bout.
+    columns:
+      - name: fighter_url
+        description: Natural key. Unique here, unlike in the source.
+        data_tests: [unique, not_null]
+      - name: fighter_name
+        data_tests: [not_null]
+      - name: height_inches
+        description: Parsed from "5' 11"".
+      - name: reach_inches
+        description: >
+          Null for roughly one fighter in seven. That is a gap in the source,
+          not a parse failure, so it is deliberately not tested not_null.
+      - name: date_of_birth
+        description: Parsed from "Feb 13, 1990". Null where the site has none.
+      - name: stance
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ["Orthodox", "Southpaw", "Switch", "Open Stance", "Sideways"]
