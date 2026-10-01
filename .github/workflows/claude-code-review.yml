@@ -36,6 +36,11 @@ jobs:
           fetch-depth: 1
 
       - uses: anthropics/claude-code-action@v1
+        env:
+          # The review recipe starts its helper agents without saying whether
+          # to wait for them, and they now default to the background. A
+          # one-shot CI run ends when Claude's turn ends, killing them first.
+          CLAUDE_CODE_DISABLE_BACKGROUND_TASKS: "1"
         with:
           # An OAuth token bills the review to the Claude subscription instead
           # of API credits. Generated locally with `claude setup-token`.
