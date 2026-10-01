@@ -1,0 +1,64 @@
+name: Claude Code Review
+
+# A reviewer for a repository with one author. ci.yml proves the change still
+# runs; this job reads the diff the way a colleague would and comments on what
+# it finds. It is advisory on purpose: it posts, it does not block the merge.
+on:
+  pull_request:
+    types: [opened, synchronize, ready_for_review, reopened]
+
+# Only the newest push to a branch is reviewed. Without this, a branch pushed
+# three times collects three reviews of three diffs that no longer exist.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    name: automated review
+    runs-on: ubuntu-latest
+    # A review that loops burns subscription usage, not just runner minutes.
+    timeout-minutes: 20
+
+    # Read-only on the repository. The one write is the review comments, and
+    # those go through the Claude GitHub App rather than this token.
+    permissions:
+      contents: read
+      pull-requests: read
+      issues: read
+      id-token: write # required by the action's GitHub App authentication
+
+    steps:
+      # A shallow clone is enough. The review reads the diff from the GitHub
+      # API, and only needs the working tree to open the files it touches.
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+
+      - uses: anthropics/claude-code-action@v1
+        with:
+          # An OAuth token bills the review to the Claude subscription instead
+          # of API credits. Generated locally with `claude setup-token`.
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+
+          # The same review recipe as the /code-review skill in the local CLI,
+          # so a review here reaches the same findings a review on the laptop
+          # would, rather than whatever a hand-written prompt happens to ask.
+          plugin_marketplaces: "https://github.com/anthropics/claude-code.git"
+          plugins: "code-review@claude-code-plugins"
+
+          # --comment puts each finding on the line it is about, and posts a
+          # single summary comment when the diff looks clean. Without it the
+          # review lands in the run log, where nobody reads it.
+          prompt: "/code-review:code-review --comment ${{ github.repository }}/pull/${{ github.event.pull_request.number }}"
+
+          # The action only starts the MCP server that posts inline comments
+          # when --allowedTools names the tool here, even though the skill's
+          # own frontmatter already allows it. Dropping this line silently
+          # turns the review back into a log-only run. The gh commands are how
+          # the skill reads the PR and posts its summary when nothing is found.
+          claude_args: '--allowedTools "mcp__github_inline_comment__create_inline_comment,Bash(gh pr comment:*),Bash(gh pr view:*),Bash(gh pr diff:*)"'
+
+          # Temporary: the action hides Claude's messages by default, so the
+          # log can't say why a review ends early. Remove once diagnosed.
+          show_full_output: true
