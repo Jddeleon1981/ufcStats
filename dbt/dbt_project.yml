@@ -29,6 +29,10 @@ models:
     marts:
       +materialized: table
       +schema: marts
+      # Marts are the public interface, so their shape is a promise: the build
+      # fails if a model's columns or types stop matching _marts_models.yml.
+      +contract:
+        enforced: true
 
 # Seeds are a sampled, referentially complete slice of the raw layer, committed
 # so that `dbt build --target ci` runs with no warehouse and no scrape.

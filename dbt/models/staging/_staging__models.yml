@@ -19,6 +19,9 @@ models:
         data_tests: [not_null]
       - name: event_state
         description: Null where the source gives only city and country.
+      - name: is_modern_era
+        description: A boolean indicating whether the event is in the modern era (on or after September 2000).
+        data_tests: [not_null]
 
   - name: stg_ufcstats__bouts
     description: >

@@ -1,0 +1,299 @@
+version: 2
+
+# Contracts are enforced for the whole folder in dbt_project.yml, so every
+# column below needs a data_type and the list must match the model exactly.
+# not_null constraints go on every column that must be populated; the ones
+# without a constraint are nullable on purpose, and say why.
+
+models:
+  - name: dim_event
+    description: >
+      One row per event, including upcoming cards that have no bouts yet.
+    columns:
+      - name: event_sk
+        description: Surrogate key. Hash of event_url.
+        data_type: varchar
+        constraints: [{type: not_null}]
+        data_tests: [unique]
+      - name: event_url
+        description: Natural key -- the ufcstats.com event detail URL.
+        data_type: varchar
+        constraints: [{type: not_null}]
+        data_tests: [unique]
+      - name: event_name
+        data_type: varchar
+        constraints: [{type: not_null}]
+      - name: event_date
+        data_type: date
+        constraints: [{type: not_null}]
+      - name: event_city
+        data_type: varchar
+        constraints: [{type: not_null}]
+      - name: event_state
+        description: Null where the source gives only city and country.
+        data_type: varchar
+      - name: event_country
+        data_type: varchar
+        constraints: [{type: not_null}]
+      - name: is_modern_era
+        description: True for events on or after September 2000.
+        data_type: boolean
+        constraints: [{type: not_null}]
+
+  - name: dim_fighter
+    description: >
+      One row per fighter, as of the latest scrape. Career figures are
+      overwritten by the site after every bout, so they describe the fighter
+      today, not at the time of any particular bout.
+    columns:
+      - name: fighter_sk
+        description: Surrogate key. Hash of fighter_url.
+        data_type: varchar
+        constraints: [{type: not_null}]
+        data_tests: [unique]
+      - name: fighter_url
+        description: Natural key -- the ufcstats.com fighter detail URL.
+        data_type: varchar
+        constraints: [{type: not_null}]
+        data_tests: [unique]
+      - name: fighter_name
+        data_type: varchar
+        constraints: [{type: not_null}]
+      - name: first_name
+        data_type: varchar
+        constraints: [{type: not_null}]
+      - name: last_name
+        description: Null for single-name fighters.
+        data_type: varchar
+      - name: height_inches
+        description: Null where the site has no height on file.
+        data_type: integer
+      - name: weight_lbs
+        description: Null where the site shows a placeholder instead of a weight.
+        data_type: integer
+      - name: reach_inches
+        description: Null for roughly one fighter in seven; a gap in the source.
+        data_type: integer
+      - name: stance
+        description: Null where the site has no stance on file.
+        data_type: varchar
+      - name: date_of_birth
+        description: Null where the site has none.
+        data_type: date
+      - name: sig_strikes_landed_per_min
+        data_type: decimal(6, 2)
+        constraints: [{type: not_null}]
+      - name: sig_strikes_absorbed_per_min
+        data_type: decimal(6, 2)
+        constraints: [{type: not_null}]
+      - name: sig_strike_accuracy_pct
+        data_type: double
+        constraints: [{type: not_null}]
+      - name: sig_strike_defense_pct
+        data_type: double
+        constraints: [{type: not_null}]
+      - name: takedowns_per_15_min
+        data_type: decimal(6, 2)
+        constraints: [{type: not_null}]
+      - name: takedown_accuracy_pct
+        data_type: double
+        constraints: [{type: not_null}]
+      - name: takedown_defense_pct
+        data_type: double
+        constraints: [{type: not_null}]
+      - name: submissions_per_15_min
+        data_type: decimal(6, 2)
+        constraints: [{type: not_null}]
+
+  - name: fct_bout
+    description: >
+      One row per bout, both corners side by side. See fct_fighter_bout for
+      one row per fighter per bout.
+    data_tests:
+      # A missing winner means a no contest, and nothing else.
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "(winner_fighter_sk is null) = is_no_contest"
+    columns:
+      - name: bout_sk
+        description: Surrogate key. Hash of bout_url.
+        data_type: varchar
+        constraints: [{type: not_null}]
+        data_tests: [unique]
+      - name: bout_url
+        description: Natural key -- the ufcstats.com bout detail URL.
+        data_type: varchar
+        constraints: [{type: not_null}]
+        data_tests: [unique]
+      - name: event_sk
+        data_type: varchar
+        constraints: [{type: not_null}]
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('dim_event')
+                field: event_sk
+      - name: fighter_a_sk
+        data_type: varchar
+        constraints: [{type: not_null}]
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('dim_fighter')
+                field: fighter_sk
+      - name: fighter_b_sk
+        data_type: varchar
+        constraints: [{type: not_null}]
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('dim_fighter')
+                field: fighter_sk
+      - name: winner_fighter_sk
+        description: Null for a no contest.
+        data_type: varchar
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('dim_fighter')
+                field: fighter_sk
+      - name: event_date
+        description: Denormalised from dim_event so date filters need no join.
+        data_type: date
+        constraints: [{type: not_null}]
+      - name: weight_class
+        data_type: varchar
+        constraints: [{type: not_null}]
+      - name: method
+        data_type: varchar
+        constraints: [{type: not_null}]
+      - name: is_finish
+        description: >
+          True for KO/TKO and submission, false for decisions, null for
+          Overturned, DQ and Could Not Continue.
+        data_type: boolean
+      - name: is_no_contest
+        data_type: boolean
+        constraints: [{type: not_null}]
+      - name: finish_round
+        data_type: integer
+        constraints: [{type: not_null}]
+      - name: finish_time_seconds
+        description: Seconds into the final round.
+        data_type: integer
+        constraints: [{type: not_null}]
+      - name: bout_duration_seconds
+        description: >
+          Total time fought, assuming five-minute rounds:
+          (finish_round - 1) * 300 + finish_time_seconds.
+        data_type: integer
+        constraints: [{type: not_null}]
+        data_tests:
+          - dbt_utils.expression_is_true:
+              arguments:
+                expression: "> 0"
+
+  - name: fct_fighter_bout
+    description: >
+      One row per fighter per bout -- fct_bout unpivoted, so every bout
+      appears exactly twice, once from each corner's point of view.
+    data_tests:
+      # The grain: one row per corner per bout.
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [bout_sk, corner]
+    columns:
+      - name: fighter_bout_sk
+        description: Surrogate key. Hash of bout_url and the fighter's url.
+        data_type: varchar
+        constraints: [{type: not_null}]
+        data_tests: [unique]
+      - name: bout_sk
+        data_type: varchar
+        constraints: [{type: not_null}]
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('fct_bout')
+                field: bout_sk
+      - name: event_sk
+        data_type: varchar
+        constraints: [{type: not_null}]
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('dim_event')
+                field: event_sk
+      - name: fighter_sk
+        data_type: varchar
+        constraints: [{type: not_null}]
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('dim_fighter')
+                field: fighter_sk
+      - name: opponent_fighter_sk
+        data_type: varchar
+        constraints: [{type: not_null}]
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('dim_fighter')
+                field: fighter_sk
+      - name: corner
+        data_type: varchar
+        constraints: [{type: not_null}]
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ["a", "b"]
+      - name: is_winner
+        description: Null for a no contest, which is neither a win nor a loss.
+        data_type: boolean
+      - name: age_at_bout_years
+        description: Null where the fighter has no date of birth on file.
+        data_type: double
+      - name: knockdowns
+        data_type: integer
+        constraints: [{type: not_null}]
+      - name: sig_strikes_landed
+        data_type: integer
+        constraints: [{type: not_null}]
+      - name: sig_strikes_attempted
+        data_type: integer
+        constraints: [{type: not_null}]
+      - name: sig_strike_accuracy_pct
+        description: Null when no significant strikes were attempted.
+        data_type: double
+      - name: total_strikes_landed
+        data_type: integer
+        constraints: [{type: not_null}]
+      - name: total_strikes_attempted
+        data_type: integer
+        constraints: [{type: not_null}]
+      - name: takedowns_landed
+        data_type: integer
+        constraints: [{type: not_null}]
+      - name: takedowns_attempted
+        data_type: integer
+        constraints: [{type: not_null}]
+      - name: takedown_accuracy_pct
+        description: Null when no takedowns were attempted.
+        data_type: double
+      - name: submission_attempts
+        data_type: integer
+        constraints: [{type: not_null}]
+      - name: reversals
+        data_type: integer
+        constraints: [{type: not_null}]
+      - name: control_time_seconds
+        data_type: integer
+        constraints: [{type: not_null}]
+      - name: sig_strikes_absorbed
+        description: The opponent's sig_strikes_landed in the same bout.
+        data_type: integer
+        constraints: [{type: not_null}]
+      - name: takedowns_conceded
+        description: The opponent's takedowns_landed in the same bout.
+        data_type: integer
+        constraints: [{type: not_null}]

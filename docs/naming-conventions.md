@@ -45,7 +45,7 @@ fct_bout       fct_fighter_bout       fct_bout_features
 - **Natural keys** are the source's own detail URLs: `fighter_url`, `event_url`,
   `bout_url`. These are what the raw layer carries, and they are stable across
   re-scrapes in a way that an `AUTO_INCREMENT` id never was.
-- **Surrogate keys** are generated in staging with
+- **Surrogate keys** are generated in the marts with
   `dbt_utils.generate_surrogate_key`, and named `<entity>_sk`.
 - Foreign keys keep the referenced entity's name: `fighter_sk`, not `fighter_id`
   on one model and `fighterID` on another.

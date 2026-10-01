@@ -53,6 +53,15 @@ parsed as (
 
     from deduplicated
 
+),
+
+classified as (
+    select *,
+    case
+        when event_date >= '2000-09-01' then true
+        else false
+    end as is_modern_era
+    from parsed
 )
 
-select * from parsed
+select * from classified
