@@ -1,0 +1,7 @@
+{
+    // dbt models are Jinja templates, not plain T-SQL; stop the mssql extension from linting them
+    "files.associations": {
+        "**/dbt/**/*.sql": "jinja-sql",
+        "**/dbt/**/*.yml": "jinja-yaml"
+    }
+}
