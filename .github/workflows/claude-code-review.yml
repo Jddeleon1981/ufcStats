@@ -55,5 +55,10 @@ jobs:
           # The action only starts the MCP server that posts inline comments
           # when --allowedTools names the tool here, even though the skill's
           # own frontmatter already allows it. Dropping this line silently
-          # turns the review back into a log-only run.
-          claude_args: '--allowedTools "mcp__github_inline_comment__create_inline_comment"'
+          # turns the review back into a log-only run. The gh commands are how
+          # the skill reads the PR and posts its summary when nothing is found.
+          claude_args: '--allowedTools "mcp__github_inline_comment__create_inline_comment,Bash(gh pr comment:*),Bash(gh pr view:*),Bash(gh pr diff:*)"'
+
+          # Temporary: the action hides Claude's messages by default, so the
+          # log can't say why a review ends early. Remove once diagnosed.
+          show_full_output: true
