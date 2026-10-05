@@ -34,9 +34,7 @@ def parse_fighter_links(html) -> list[tuple[str, str, str]]:
 def parse_fighter_stats(html, first_name, last_name, url) -> dict:
     """Parse a fighter's detail page into a {stat title: value} dict."""
     soup = BeautifulSoup(html, "html.parser")
-    list_items = soup.find_all(
-        "li", class_="b-list__box-list-item b-list__box-list-item_type_block"
-    )
+    list_items = soup.find_all("li", class_="b-list__box-list-item b-list__box-list-item_type_block")
     stats = {"First Name": first_name, "Last Name": last_name, "URL": url}
     for item in list_items:
         # remove the trailing colon from the title and strip it back out of the value
@@ -71,8 +69,8 @@ def parse_fighter_name(html) -> str:
     return title.get_text(strip=True) if title else ""
 
 
-def parse_event_fights(html) -> list[tuple[str, str, str]]:
-    """Parse one event page into (winner, weight class, fight url) per bout."""
+def parse_event_fights(html) -> list[tuple[str, str, str, str]]:
+    """Parse one event page into (winner, weight class, fight url, result) per bout."""
     soup = BeautifulSoup(html, "html.parser")
 
     # the main fights table lists every bout on the card
@@ -86,43 +84,34 @@ def parse_event_fights(html) -> list[tuple[str, str, str]]:
     fight_links = []
     winners = []
     weight_classes = []
+    results = []
     for row in rows:
-
         # rows carry the individual fight page as an onclick handler
         onclick = row.get("onclick")
         if onclick:
             fight_links.append(onclick)
 
-        # find the winner, accounting for no-contest results
+        # find the winner, accounting for no-contest and draw results
         winner_tag = row.find("a", class_="b-link b-link_style_black")
         header_tag = row.find("th")
-        nc_tag = row.find("i", class_="b-flag__text")
-        no_contest_tag_text = nc_tag.text.strip() if nc_tag else None
+        flag_tag = row.find("i", class_="b-flag__text")
+        result_text = flag_tag.text.strip() if flag_tag else None
         if winner_tag and not header_tag:
-            if no_contest_tag_text == "nc":
-                winners.append(no_contest_tag_text)
-            else:
-                winners.append(winner_tag.get_text().strip())
+            winners.append(winner_tag.get_text().strip() if result_text == "win" else result_text)
+            results.append(result_text)
 
         # the weight class is the 2nd left-aligned column
-        weight_class_tags = row.find_all(
-            "td", class_="b-fight-details__table-col l-page_align_left"
-        )
+        weight_class_tags = row.find_all("td", class_="b-fight-details__table-col l-page_align_left")
         if weight_class_tags and len(weight_class_tags) > 1:
-            weight_class_text = (
-                weight_class_tags[1]
-                .find("p", class_="b-fight-details__table-text")
-                .get_text()
-                .strip()
-            )
+            weight_class_text = weight_class_tags[1].find("p", class_="b-fight-details__table-text").get_text().strip()
             weight_classes.append(weight_class_text)
 
     fight_links = [fight.split("'")[1] for fight in fight_links]
-    # strict=True: these three lists are appended under different conditions, so a
+    # strict=True: these four lists are appended under different conditions, so a
     # divergence means the rows no longer line up. Zipping short would not just
     # drop bouts, it would pair a bout with the next one's winner -- silent
     # corruption. Raise instead and let the caller's error handler record it.
-    return list(zip(winners, weight_classes, fight_links, strict=True))
+    return list(zip(winners, weight_classes, fight_links, results, strict=True))
 
 
 def parse_bout(html) -> dict:
@@ -140,16 +129,8 @@ def parse_bout(html) -> dict:
         return {}
     table = tables[0]
 
-    totals = [
-        p.get_text(strip=True)
-        for p in table.find_all("p", class_="b-fight-details__table-text")
-    ]
-    fighter_urls = add_www_to_links(
-        [
-            link["href"]
-            for link in table.find_all("a", class_="b-link b-link_style_black")
-        ]
-    )
+    totals = [p.get_text(strip=True) for p in table.find_all("p", class_="b-fight-details__table-text")]
+    fighter_urls = add_www_to_links([link["href"] for link in table.find_all("a", class_="b-link b-link_style_black")])
 
     # method, round, and time live in the summary paragraph below the table
     text_content = soup.find("p", class_="b-fight-details__text")

@@ -33,6 +33,7 @@ gold_bout_layer as (
         bs.method,
         bs.is_finish,
         bs.is_no_contest,
+        bs.is_draw,
         bs.finish_round,
         bs.finish_time_seconds,
         ((bs.finish_round - 1) * 300 + bs.finish_time_seconds) as bout_duration_seconds

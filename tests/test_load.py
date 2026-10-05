@@ -80,9 +80,7 @@ def test_log_records_each_file_with_its_row_count(tmp_path, con):
 
     load.load_entity(con, "fighters", tmp_path)
 
-    log = con.execute(
-        "SELECT entity, file_path, dt, row_count FROM raw._load_log ORDER BY file_path"
-    ).fetchall()
+    log = con.execute("SELECT entity, file_path, dt, row_count FROM raw._load_log ORDER BY file_path").fetchall()
     assert log == [
         ("fighters", first.as_posix(), date(2026, 9, 8), 2),
         ("fighters", second.as_posix(), date(2026, 9, 8), 1),
@@ -95,29 +93,24 @@ def test_values_stay_as_strings(tmp_path, con):
 
     load.load_entity(con, "bouts", tmp_path)
 
-    types = dict(
-        con.execute(
-            "SELECT column_name, data_type FROM information_schema.columns "
-            "WHERE table_schema = 'raw' AND table_name = 'bouts'"
-        ).fetchall()
-    )
+    types = dict(con.execute("SELECT column_name, data_type FROM information_schema.columns WHERE table_schema = 'raw' AND table_name = 'bouts'").fetchall())
     assert types["fighter_a_sig_strikes"] == "VARCHAR"
     assert types["fighter_a_sig_strike_acc"] == "VARCHAR"
     assert types["dt"] == "DATE"
 
 
-def test_unexpected_column_fails_loudly_rather_than_misaligning(tmp_path, con):
+def test_new_column_is_added_and_older_rows_read_null(tmp_path, con):
     _write(tmp_path, "bouts", "2026-09-08", "00000", [{"bout_url": "a", "method": "KO/TKO"}])
     load.load_entity(con, "bouts", tmp_path)
     # a later file with a column the table has never seen
     _write(tmp_path, "bouts", "2026-09-09", "00000", [{"bout_url": "b", "method": "Submission", "referee": "Herb Dean"}])
+    load.load_entity(con, "bouts", tmp_path)
 
-    with pytest.raises(duckdb.Error):
-        load.load_entity(con, "bouts", tmp_path)
-
-    # and the failed file left nothing behind, in either the table or the log
-    assert _count(con, "raw.bouts") == 1
-    assert _count(con, "raw._load_log") == 1
+    # assert that the new row and column were added. Also check that row one has a null value for the new column
+    assert _count(con, "raw.bouts") == 2
+    assert _count(con, "raw._load_log") == 2
+    assert con.execute("SELECT referee FROM raw.bouts WHERE bout_url = 'a'").fetchone()[0] is None
+    assert con.execute("SELECT referee FROM raw.bouts WHERE bout_url = 'b'").fetchone()[0] == "Herb Dean"
 
 
 def test_missing_entity_directory_loads_nothing(tmp_path, con):

@@ -66,6 +66,25 @@ def _ensure_schema(con: duckdb.DuckDBPyConnection) -> None:
     )
 
 
+def _add_new_columns(con: duckdb.DuckDBPyConnection, entity: str, path: Path) -> None:
+    """Add new columns to the raw table based on the parquet file."""
+    parquet_format = con.execute(
+        """
+        describe select * from read_parquet(?, hive_partitioning = false)
+        """,
+        [path.as_posix()],
+    ).fetchall()
+
+    table_format = con.execute(f"""describe {RAW_SCHEMA}.{entity}""").fetchall()
+    table_column_set = {row[0] for row in table_format}
+
+    for row in parquet_format:
+        if row[0] not in table_column_set:
+            name = row[0]
+            col_type = row[1]
+            con.execute(f'ALTER TABLE {RAW_SCHEMA}.{entity} ADD COLUMN "{name}" {col_type}')
+
+
 def _ensure_table(con: duckdb.DuckDBPyConnection, entity: str, sample: Path) -> None:
     """Create ``raw.<entity>`` with the first file's columns plus ``dt``.
 
@@ -125,8 +144,9 @@ def load_entity(con: duckdb.DuckDBPyConnection, entity: str, root: Path) -> Load
         # rows and the log entry land together or not at all
         con.begin()
         try:
-            # BY NAME matches columns by name, so a file with a column the table
-            # does not have fails loudly instead of landing in the wrong column
+            _add_new_columns(con, entity, path)
+            # BY NAME matches columns by name. If a new column was added above
+            # the column will be added with a NULL value for existing rows
             (row_count,) = con.execute(
                 f"""
                 INSERT INTO {RAW_SCHEMA}.{entity} BY NAME

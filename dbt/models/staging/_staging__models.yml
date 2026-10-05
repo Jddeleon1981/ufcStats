@@ -54,10 +54,11 @@ models:
                 field: fighter_url
       - name: winner_fighter_url
         description: >
-          The winning corner's url, or null for a no contest. Never a fighter
-          who was not in the bout -- that is asserted by a singular test rather
-          than a generic one, because it compares three columns.
+          The winning corner's url, or null for a no contest or draw. Never a fighter
+          who was not in the bout.
       - name: is_no_contest
+        data_tests: [not_null]
+      - name: is_draw
         data_tests: [not_null]
       - name: is_finish
         description: >
