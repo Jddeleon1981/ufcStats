@@ -128,15 +128,12 @@ def select_events(
         event_date = datetime.strptime(event["event_date"], "%B %d, %Y").date()
         if since <= event_date <= until:
             selected.append(event)
-    selected.sort(
-        key=lambda e: datetime.strptime(e["event_date"], "%B %d, %Y"), reverse=True
-    )
+    selected.sort(key=lambda e: datetime.strptime(e["event_date"], "%B %d, %Y"), reverse=True)
     return selected[:limit] if limit else selected
 
 
-def _bout_record(bout: dict, bout_url: str, event_url: str, fight) -> dict:
+def _bout_record(bout: dict, bout_url: str, event_url: str, winner: str, weight_class: str, result: str) -> dict:
     """Flatten one parsed bout into a raw record keyed by the site's own URLs."""
-    winner, weight_class, _ = fight
     fighter_urls = bout["fighter_urls"]
     # strict=True: the caller already skips totals shorter than the column list,
     # so a length mismatch here means the page rendered MORE cells than expected.
@@ -149,6 +146,7 @@ def _bout_record(bout: dict, bout_url: str, event_url: str, fight) -> dict:
             "fighter_a_url": fighter_urls[0] if fighter_urls else None,
             "fighter_b_url": fighter_urls[1] if len(fighter_urls) > 1 else None,
             "winner_name": winner,
+            "result": result,
             "weight_class": weight_class,
             "method": bout["method"],
             "finish_round": bout["finish_round"],
@@ -158,9 +156,7 @@ def _bout_record(bout: dict, bout_url: str, event_url: str, fight) -> dict:
     return record
 
 
-def extract_bouts(
-    sess, events: Iterable[dict], batch_id: str, on_error=None
-) -> list[dict]:
+def extract_bouts(sess, events: Iterable[dict], batch_id: str, on_error=None) -> list[dict]:
     """Every bout on the given events, one record per bout.
 
     Failures are isolated per bout: a card with no totals table, or a page that
@@ -176,8 +172,7 @@ def extract_bouts(
                 on_error(event_url, error)
             continue
 
-        for fight in fights:
-            bout_url = fight[2]
+        for winner, weight_class, bout_url, result in fights:
             try:
                 bout = parse_bout(http.get(sess, bout_url).text)
             except Exception as error:
@@ -187,7 +182,7 @@ def extract_bouts(
             if not bout or len(bout["totals"]) < len(BOUT_TOTALS_COLUMNS):
                 continue
 
-            record = _bout_record(bout, bout_url, event_url, fight)
+            record = _bout_record(bout, bout_url, event_url, winner, weight_class, result)
             bouts.append(_stamp(record, bout_url, batch_id, bout))
     return bouts
 
@@ -208,9 +203,7 @@ def fighter_urls_from_bouts(bouts: Iterable[dict]) -> list[str]:
     return list(urls)
 
 
-def extract_fighters(
-    sess, fighter_urls: Iterable[str], batch_id: str, on_error=None
-) -> list[dict]:
+def extract_fighters(sess, fighter_urls: Iterable[str], batch_id: str, on_error=None) -> list[dict]:
     """Career-to-date profile for each fighter URL.
 
     These values are a snapshot of what the site shows *today* — they change
@@ -228,9 +221,7 @@ def extract_fighters(
 
         name = parse_fighter_name(html)
         name_parts = name.split(" ", 1)
-        stats = parse_fighter_stats(
-            html, name_parts[0], name_parts[1] if len(name_parts) > 1 else "", url
-        )
+        stats = parse_fighter_stats(html, name_parts[0], name_parts[1] if len(name_parts) > 1 else "", url)
         stats.pop("", None)  # the page has a blank spacer list item
 
         record = {
@@ -247,9 +238,7 @@ def extract_fighters(
 
 
 # Landing
-def partition_dir(
-    entity: str, root: Path, partition_date: date | None = None
-) -> Path:
+def partition_dir(entity: str, root: Path, partition_date: date | None = None) -> Path:
     """The ``dt=`` directory one run's records land in.
 
     Readers that want *this* run scope to this directory; readers that want the

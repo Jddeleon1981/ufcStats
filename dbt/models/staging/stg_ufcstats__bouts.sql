@@ -14,7 +14,12 @@ with source as (
 
 deduplicated as (
 
-    select *
+    select
+        *,
+        -- Rows scraped before 2026-10-04 predate the result column. For those,
+        -- a no contest is already in winner_name and everything else is a win:
+        -- all 61 draws were re-scraped with the column in place.
+        coalesce(result, case when winner_name = 'nc' then 'nc' else 'win' end) as outcome
     from source
     qualify row_number() over (
         partition by bout_url
@@ -38,14 +43,14 @@ parsed as (
         fighter_b_name,
 
         -- Every one of the 9,135 raw rows resolves to a corner or to a no
-        -- contest -- verified before this model was written. If the site ever
-        -- renders a winner matching neither corner, this returns null and the
-        -- not_null test on the non-no-contest subset catches it.
+        -- contest or to a draw.
         case
             when winner_name = fighter_a_name then fighter_a_url
             when winner_name = fighter_b_name then fighter_b_url
         end as winner_fighter_url,
-        winner_name = 'nc' as is_no_contest,
+        outcome,
+        outcome = 'nc' as is_no_contest,
+        outcome = 'draw' as is_draw,
 
         weight_class,
         method,

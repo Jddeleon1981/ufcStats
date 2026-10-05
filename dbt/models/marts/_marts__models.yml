@@ -110,10 +110,10 @@ models:
       One row per bout, both corners side by side. See fct_fighter_bout for
       one row per fighter per bout.
     data_tests:
-      # A missing winner means a no contest, and nothing else.
+      # A missing winner means a no contest or draw.
       - dbt_utils.expression_is_true:
           arguments:
-            expression: "(winner_fighter_sk is null) = is_no_contest"
+            expression: "(winner_fighter_sk is null) = (is_no_contest or is_draw)"
     columns:
       - name: bout_sk
         description: Surrogate key. Hash of bout_url.
@@ -173,6 +173,9 @@ models:
           Overturned, DQ and Could Not Continue.
         data_type: boolean
       - name: is_no_contest
+        data_type: boolean
+        constraints: [{type: not_null}]
+      - name: is_draw
         data_type: boolean
         constraints: [{type: not_null}]
       - name: finish_round
@@ -248,7 +251,7 @@ models:
               arguments:
                 values: ["a", "b"]
       - name: is_winner
-        description: Null for a no contest, which is neither a win nor a loss.
+        description: Null for a no contest. False for a draw as they didn't win.
         data_type: boolean
       - name: age_at_bout_years
         description: Null where the fighter has no date of birth on file.

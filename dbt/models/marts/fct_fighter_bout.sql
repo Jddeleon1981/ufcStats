@@ -36,6 +36,7 @@ gold_fighter_bout_layer as (
         case
             when bs.winner_fighter_url = bs.fighter_a_url then true
             when bs.winner_fighter_url = bs.fighter_b_url then false
+            when bs.outcome = 'draw' then false
             else null
         end as is_winner,
         ((es.event_date - fs.date_of_birth) / 365.25) as age_at_bout_years,
@@ -70,6 +71,7 @@ gold_fighter_bout_layer as (
         case
             when bs.winner_fighter_url = bs.fighter_a_url then false
             when bs.winner_fighter_url = bs.fighter_b_url then true
+            when bs.outcome = 'draw' then false
             else null
         end as is_winner,
         ((es.event_date - fs.date_of_birth) / 365.25) as age_at_bout_years,

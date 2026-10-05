@@ -48,9 +48,7 @@ def test_parse_fighter_stats_maps_titles_to_values():
 def test_parse_fighter_stats_keeps_empty_spacer_key():
     # the page has a blank list item that yields an empty-string key; downstream
     # code explicitly drops it, so this guards that the quirk still exists.
-    stats = parse_fighter_stats(
-        _fixture("fighterStats.html"), "Israel", "Adesanya", "url"
-    )
+    stats = parse_fighter_stats(_fixture("fighterStats.html"), "Israel", "Adesanya", "url")
     assert "" in stats
 
 
@@ -74,13 +72,10 @@ def test_add_www_to_links_inserts_subdomain():
 def test_parse_event_fights_pairs_winner_weightclass_and_link():
     fights = parse_event_fights(_fixture("eventPage.html"))
     assert fights == [
-        (
-            "Israel Adesanya",
-            "Middleweight",
-            "http://ufcstats.com/fight-details/fight111",
-        ),
+        ("Israel Adesanya", "Middleweight", "http://ufcstats.com/fight-details/fight111", "win"),
         # a no contest has no winner, so the flag text stands in for one
-        ("nc", "Light Heavyweight", "http://ufcstats.com/fight-details/fight222"),
+        ("nc", "Light Heavyweight", "http://ufcstats.com/fight-details/fight222", "nc"),
+        ("draw", "Lightweight", "http://ufcstats.com/fight-details/fight333", "draw"),
     ]
 
 

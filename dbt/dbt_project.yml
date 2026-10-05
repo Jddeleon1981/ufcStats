@@ -85,6 +85,7 @@ seeds:
         fighter_a_url: varchar
         fighter_b_url: varchar
         winner_name: varchar
+        result: varchar
         weight_class: varchar
         method: varchar
         finish_round: varchar
