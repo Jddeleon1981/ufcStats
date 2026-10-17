@@ -251,8 +251,17 @@ models:
               arguments:
                 values: ["a", "b"]
       - name: is_winner
-        description: Null for a no contest. False for a draw as they didn't win.
+        description: Null for a no contest. False for a draw since they didn't win.
         data_type: boolean
+      - name: result
+        description: Result of the bout from the fighter's point of view. Takes on one
+        of the four values: win, loss, draw or no_contest. No_contest comes from the sites nc.
+        data_type: varchar
+        constraints: [{type: not_null}]
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ["win", "loss", "draw", "no_contest"]
       - name: age_at_bout_years
         description: Null where the fighter has no date of birth on file.
         data_type: double

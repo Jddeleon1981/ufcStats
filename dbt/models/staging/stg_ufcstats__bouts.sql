@@ -48,9 +48,6 @@ parsed as (
             when winner_name = fighter_a_name then fighter_a_url
             when winner_name = fighter_b_name then fighter_b_url
         end as winner_fighter_url,
-        outcome,
-        outcome = 'nc' as is_no_contest,
-        outcome = 'draw' as is_draw,
 
         weight_class,
         method,

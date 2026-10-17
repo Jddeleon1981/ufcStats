@@ -35,10 +35,16 @@ gold_fighter_bout_layer as (
         'a' as corner,
         case
             when bs.winner_fighter_url = bs.fighter_a_url then true
+            when bs.is_draw then false
             when bs.winner_fighter_url = bs.fighter_b_url then false
-            when bs.outcome = 'draw' then false
             else null
         end as is_winner,
+        case
+            when bs.is_no_contest then 'no_contest'
+            when bs.is_draw then 'draw'
+            when is_winner then 'win'
+            when is_winner = false then 'loss'
+        end as result,
         ((es.event_date - fs.date_of_birth) / 365.25) as age_at_bout_years,
         bs.fighter_a_knockdowns as knockdowns,
         bs.fighter_a_sig_strikes_landed as sig_strikes_landed,
@@ -70,10 +76,16 @@ gold_fighter_bout_layer as (
         'b' as corner,
         case
             when bs.winner_fighter_url = bs.fighter_a_url then false
+            when bs.is_draw then false
             when bs.winner_fighter_url = bs.fighter_b_url then true
-            when bs.outcome = 'draw' then false
             else null
         end as is_winner,
+        case
+            when bs.is_no_contest then 'no_contest'
+            when bs.is_draw then 'draw'
+            when is_winner then 'win'
+            when is_winner = false then 'loss'
+        end as result,
         ((es.event_date - fs.date_of_birth) / 365.25) as age_at_bout_years,
         bs.fighter_b_knockdowns as knockdowns,
         bs.fighter_b_sig_strikes_landed as sig_strikes_landed,
