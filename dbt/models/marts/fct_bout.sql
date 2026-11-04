@@ -17,7 +17,7 @@ event_source as (
 
 ),
 
-gold_bout_layer as (
+final as (
 
     select 
         {{ dbt_utils.generate_surrogate_key(['bout_url']) }} as bout_sk,
@@ -43,4 +43,4 @@ gold_bout_layer as (
     
 )
 
-select * from gold_bout_layer
+select * from final

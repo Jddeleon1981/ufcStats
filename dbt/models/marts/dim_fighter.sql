@@ -11,7 +11,7 @@ with source as (
 
 ),
 
-gold_fighter_layer as (
+final as (
 
     select 
         {{ dbt_utils.generate_surrogate_key(['fighter_url']) }} as fighter_sk,
@@ -38,4 +38,4 @@ gold_fighter_layer as (
 
 )
 
-select * from gold_fighter_layer
+select * from final

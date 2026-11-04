@@ -23,7 +23,7 @@ event_source as (
 
 ),
 
-gold_fighter_bout_layer as (
+final as (
 
     {# Fighter A section #}
     select 
@@ -107,4 +107,4 @@ gold_fighter_bout_layer as (
 
 )
 
-select * from gold_fighter_bout_layer
+select * from final
