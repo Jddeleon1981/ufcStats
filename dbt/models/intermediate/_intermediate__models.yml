@@ -43,6 +43,11 @@ models:
       - dbt_utils.unique_combination_of_columns:
           arguments:
             combination_of_columns: [bout_url, fighter_url]
+      # Every window, and the strict < in the leakage test, assumes a fighter
+      # never has two bouts on one date. This makes that an enforced fact.
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [fighter_url, event_date]
     columns:
       - name: bout_url
         data_tests: [not_null]
