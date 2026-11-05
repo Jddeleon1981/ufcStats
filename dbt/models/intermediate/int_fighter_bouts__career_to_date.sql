@@ -6,10 +6,12 @@
     itself. These are the point-in-time features: dim_fighter's career rates
     are not, because the site overwrites them after every bout.
 
-    Every aggregate shares one frame, the `prior` window: the fighter's bouts
-    in date order, from their first up to the one before this. On a debut the
-    frame is empty, so counts are 0 and averages are null. The frame is only
-    correct while a fighter never has two bouts on one date.
+    The running totals share one frame, the `prior` window: the fighter's
+    bouts in date order, from their first up to the one before this. On a
+    debut the frame is empty, so counts are 0 and averages are null. The win
+    streak needs a reset, so it is built separately below and shifted back by
+    one bout with lag(). Both are only correct while a fighter never has two
+    bouts on one date.
 
     A table rather than the folder's ephemeral default, so tests can select
     from it.
@@ -27,6 +29,7 @@ running_totals as (
         bout_url,
         fighter_url,
         event_date,
+        result,
 
         -- count() over an empty frame is 0, so these are never null. Counting
         -- a case expression keeps the filter portable: not every engine
@@ -55,6 +58,45 @@ running_totals as (
 
 ),
 
+-- The win streak is gaps-and-islands: a running total can't reset to zero, so
+-- each career is cut into islands that start after every loss or draw, and
+-- wins are counted inside each island. The next two CTEs include the current
+-- bout on purpose; final then takes the previous bout's value with lag(), so
+-- the feature itself is still strictly prior.
+
+streak_islands as (
+
+    -- Which island this bout belongs to: losses and draws so far, this one
+    -- included. A win or a no contest doesn't start a new island.
+    select
+        *,
+        count(case when result in ('loss', 'draw') then 1 end) over (
+            partition by fighter_url
+            order by event_date
+            rows between unbounded preceding and current row
+        ) as streak_island
+
+    from running_totals
+
+),
+
+streak_counts as (
+
+    -- Wins so far within the island, this bout included: the streak a fighter
+    -- carries out of the bout. A no contest adds nothing and starts nothing,
+    -- so it is invisible to the streak.
+    select
+        *,
+        count(case when result = 'win' then 1 end) over (
+            partition by fighter_url, streak_island
+            order by event_date
+            rows between unbounded preceding and current row
+        ) as win_streak_after
+
+    from streak_islands
+
+),
+
 final as (
 
     select
@@ -66,6 +108,13 @@ final as (
         prior_wins,
         prior_losses,
         prior_draws,
+
+        -- The streak carried into this bout is the one carried out of the last.
+        -- A debut has no previous bout, so lag() is null and the streak is 0.
+        coalesce(
+            lag(win_streak_after) over (partition by fighter_url order by event_date),
+            0
+        ) as prior_win_streak,
 
         -- Draws are a result and count; no contests aren't. Null until the
         -- fighter has at least one bout with a result.
@@ -84,7 +133,7 @@ final as (
         prior_takedown_diff / nullif(prior_seconds_fought / 900.0, 0) as prior_takedown_diff_per_15,
         cast(prior_control_seconds as double) / nullif(prior_seconds_fought, 0) as prior_control_share
 
-    from running_totals
+    from streak_counts
 
 )
 

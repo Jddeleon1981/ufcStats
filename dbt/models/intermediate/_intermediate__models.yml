@@ -60,6 +60,13 @@ models:
         data_tests: [not_null]
       - name: prior_draws
         data_tests: [not_null]
+      - name: prior_win_streak
+        description: >
+          Consecutive wins immediately before this bout. A loss or a draw ends
+          a streak; a no contest neither adds to it nor ends it. UFC bouts
+          since September 2000 only, so 0 on a UFC debut whatever the record
+          elsewhere.
+        data_tests: [not_null]
       - name: prior_win_rate
         description: >
           prior_wins / (prior_wins + prior_losses + prior_draws). No contests
