@@ -58,8 +58,11 @@ fct_bout       fct_fighter_bout       fct_bout_features
 - Booleans read as assertions: `is_title_bout`, `has_totals`.
 - Dates end `_date`, timestamps end `_at`, durations state their unit:
   `control_time_seconds`, `average_fight_time_minutes`.
-- Counts end `_count`; ratios and shares end `_rate` or `_pct` and are stored as
+- Counts are plain plural nouns: `knockdowns`, `reversals`, `prior_wins`.
+  Ratios and shares end `_rate`, `_share` or `_pct` and are stored as
   decimals, not as the source's `"45%"` strings.
+- Career-to-date features start `prior_` and cover only bouts strictly before
+  the current one: `prior_bouts`, `prior_win_rate`.
 - The two sides of a bout are `_a` / `_b` suffixes, never `A`/`B` casing.
 
 ## CTEs
