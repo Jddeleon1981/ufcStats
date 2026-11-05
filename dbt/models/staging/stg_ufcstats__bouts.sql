@@ -48,7 +48,7 @@ parsed as (
             when winner_name = fighter_a_name then fighter_a_url
             when winner_name = fighter_b_name then fighter_b_url
         end as winner_fighter_url,
-        outcome,
+
         outcome = 'nc' as is_no_contest,
         outcome = 'draw' as is_draw,
 
@@ -66,6 +66,13 @@ parsed as (
 
         try_cast(finish_round as integer) as finish_round,
         {{ parse_mmss_seconds('finish_time') }} as finish_time_seconds,
+
+        -- Total time fought: every completed round plus the time into the last
+        -- one. Built from the raw strings again because an alias defined in a
+        -- select can't be reused in the same select. Assumes five-minute
+        -- rounds, which assert_control_time_within_bout_duration guards.
+        (try_cast(finish_round as integer) - 1) * 300
+            + {{ parse_mmss_seconds('finish_time') }} as bout_duration_seconds,
 
         -- Corner A
         try_cast(fighter_a_knockdowns as integer) as fighter_a_knockdowns,

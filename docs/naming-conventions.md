@@ -18,9 +18,12 @@ identifiers we control; they are not the source's presentation strings.
 | Layer | Prefix | Materialization | Rule |
 |---|---|---|---|
 | Raw (bronze) | `raw.<entity>` | parquet / seed | Append-only. Values exactly as the source rendered them. |
-| Staging | `stg_<source>__<entity>` | view | One model per source table. Rename, cast, clean. **No joins, no business logic.** |
-| Intermediate | `int_<subject>__<verb>` | ephemeral | Shared building blocks. Never read by anything outside dbt. |
-| Marts | `dim_<entity>` / `fct_<event>` | table | The only layer consumers may read. |
+| Staging (silver) | `stg_<source>__<entity>` | view | One model per source table. Rename, cast, clean. **No joins, no business logic.** |
+| Intermediate (silver) | `int_<subject>__<verb>` | ephemeral | Shared building blocks. Never read by anything outside dbt, and never read a mart. |
+| Marts (gold) | `dim_<entity>` / `fct_<event>` | table | The only layer consumers may read. |
+
+The medallion names in brackets are mapped here once and nowhere else. Inside
+the SQL, the folder and the prefix already say which layer a model is in.
 
 The double underscore separates the two halves of a name, so
 `stg_ufcstats__fighters` reads as "the `fighters` entity from the `ufcstats`
@@ -55,9 +58,23 @@ fct_bout       fct_fighter_bout       fct_bout_features
 - Booleans read as assertions: `is_title_bout`, `has_totals`.
 - Dates end `_date`, timestamps end `_at`, durations state their unit:
   `control_time_seconds`, `average_fight_time_minutes`.
-- Counts end `_count`; ratios and shares end `_rate` or `_pct` and are stored as
+- Counts are plain plural nouns: `knockdowns`, `reversals`, `prior_wins`.
+  Ratios and shares end `_rate`, `_share` or `_pct` and are stored as
   decimals, not as the source's `"45%"` strings.
+- Career-to-date features start `prior_` and cover only bouts strictly before
+  the current one: `prior_bouts`, `prior_win_rate`.
 - The two sides of a bout are `_a` / `_b` suffixes, never `A`/`B` casing.
+
+## CTEs
+
+- Import CTEs come first, one per `ref()` or `source()`, named for what they
+  hold: `source` in staging, `<thing>_source` elsewhere (`bouts_source`).
+- Every later CTE is named for the step it performs: `deduplicated`, `parsed`,
+  `unpivoted`. Never for the layer (`gold_bout_layer`), which the folder
+  already says.
+- Intermediate models and marts end with a CTE called `final` and
+  `select * from final`. Staging models end on their last step (`parsed`),
+  because a staging model *is* one step.
 
 ## Raw-layer metadata
 

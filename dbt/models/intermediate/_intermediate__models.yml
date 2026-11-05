@@ -1,0 +1,114 @@
+version: 2
+
+models:
+  - name: int_fighter_bouts__unpivoted
+    description: >
+      One row per fighter per bout: stg_ufcstats__bouts unpivoted so each bout
+      appears once from each corner's point of view. The shared base for
+      fct_fighter_bout and the career-to-date windows. Ephemeral, so it is
+      compiled into those models as a CTE and never lands in the warehouse;
+      its grain is tested on fct_fighter_bout.
+    columns:
+      - name: fighter_url
+        description: The fighter this row is about. With bout_url, the grain.
+      - name: opponent_fighter_url
+        description: The other corner in the same bout.
+      - name: corner
+        description: Which side of the source row this came from, 'a' or 'b'.
+      - name: is_winner
+        description: False for a draw, null for a no contest.
+      - name: result
+        description: >
+          win, loss, draw or no_contest, from this fighter's point of view.
+          no_contest is the site's 'nc'.
+      - name: sig_strikes_absorbed
+        description: The opponent's sig_strikes_landed in the same bout.
+      - name: takedowns_conceded
+        description: The opponent's takedowns_landed in the same bout.
+      - name: event_date
+        description: From stg_ufcstats__events. Orders the career-to-date windows.
+      - name: age_at_bout_years
+        description: >
+          Days between date of birth and the event, divided by 365.25. Null
+          where the fighter has no date of birth on file.
+
+  - name: int_fighter_bouts__career_to_date
+    description: >
+      One row per fighter per bout, describing the fighter as they entered it.
+      Every prior_ column is computed from bouts strictly before this one, so
+      none of it includes the bout's own result or anything after it. On a
+      debut, counts are 0 and averages are null. No contests count toward
+      volume (bouts, minutes, differentials) but not toward results.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [bout_url, fighter_url]
+      # Every window, and the strict < in the leakage test, assumes a fighter
+      # never has two bouts on one date. This makes that an enforced fact.
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [fighter_url, event_date]
+    columns:
+      - name: bout_url
+        data_tests: [not_null]
+      - name: fighter_url
+        data_tests: [not_null]
+      - name: event_date
+        description: Orders each fighter's bouts. The windows assume one bout per fighter per date.
+        data_tests: [not_null]
+      - name: prior_bouts
+        description: Every earlier bout, no contests included. 0 on a debut.
+        data_tests: [not_null]
+      - name: prior_wins
+        data_tests: [not_null]
+      - name: prior_losses
+        data_tests: [not_null]
+      - name: prior_draws
+        data_tests: [not_null]
+      - name: prior_win_streak
+        description: >
+          Consecutive wins immediately before this bout. A loss or a draw ends
+          a streak; a no contest neither adds to it nor ends it. UFC bouts
+          since September 2000 only, so 0 on a UFC debut whatever the record
+          elsewhere.
+        data_tests: [not_null]
+      - name: prior_win_rate
+        description: >
+          prior_wins / (prior_wins + prior_losses + prior_draws). No contests
+          are excluded. Null until the fighter has a bout with a result.
+        data_tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                max_value: 1
+      - name: prior_finish_rate
+        description: >
+          Wins by KO/TKO or submission / prior_wins. A DQ win is a win but not
+          a finish. Null until the first win.
+        data_tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                max_value: 1
+      - name: prior_minutes_fought
+        description: Total time in earlier bouts. 0 on a debut.
+        data_tests: [not_null]
+      - name: prior_avg_fight_minutes
+        description: prior_minutes_fought / prior_bouts. Null on a debut.
+      - name: prior_sig_strike_diff_per_min
+        description: >
+          (significant strikes landed - absorbed) / minutes fought, over all
+          earlier bouts. Null on a debut.
+      - name: prior_takedown_diff_per_15
+        description: >
+          (takedowns landed - conceded) per 15 minutes fought, over all earlier
+          bouts. Null on a debut.
+      - name: prior_control_share
+        description: >
+          Control time / time fought, over all earlier bouts: time-weighted,
+          not an average of per-bout shares. Null on a debut.
+        data_tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                max_value: 1

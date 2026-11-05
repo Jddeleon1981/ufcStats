@@ -17,7 +17,7 @@ event_source as (
 
 ),
 
-gold_bout_layer as (
+final as (
 
     select 
         {{ dbt_utils.generate_surrogate_key(['bout_url']) }} as bout_sk,
@@ -36,11 +36,11 @@ gold_bout_layer as (
         bs.is_draw,
         bs.finish_round,
         bs.finish_time_seconds,
-        ((bs.finish_round - 1) * 300 + bs.finish_time_seconds) as bout_duration_seconds
+        bs.bout_duration_seconds
 
 
     from bouts_source bs join event_source es on bs.event_url = es.event_url
     
 )
 
-select * from gold_bout_layer
+select * from final

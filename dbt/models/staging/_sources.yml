@@ -52,6 +52,15 @@ sources:
           - name: fighter_b_url
             description: Corner B, keyed by the fighter's detail URL.
             data_tests: [not_null]
+          - name: result
+            description: 
+              "The event page's flag for how the bout ended: win, draw or nc. 
+              Null for every row scraped before 2026-10-04, when this column 
+              was added"
+            data_tests:
+              - accepted_values:
+                  arguments:
+                    values: ["win", "draw", "nc"]
 
       - name: fighters
         description: >

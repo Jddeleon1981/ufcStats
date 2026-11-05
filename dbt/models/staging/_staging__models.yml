@@ -74,6 +74,11 @@ models:
       - name: finish_time_seconds
         description: Seconds into the final round, parsed from "2:35".
         data_tests: [not_null]
+      - name: bout_duration_seconds
+        description: >
+          Total time fought, (finish_round - 1) * 300 + finish_time_seconds.
+          Assumes five-minute rounds.
+        data_tests: [not_null]
       - name: method
         data_tests: [not_null]
 
