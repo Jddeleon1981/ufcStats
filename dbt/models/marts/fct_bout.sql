@@ -36,7 +36,7 @@ final as (
         bs.is_draw,
         bs.finish_round,
         bs.finish_time_seconds,
-        ((bs.finish_round - 1) * 300 + bs.finish_time_seconds) as bout_duration_seconds
+        bs.bout_duration_seconds
 
 
     from bouts_source bs join event_source es on bs.event_url = es.event_url

@@ -1,0 +1,33 @@
+version: 2
+
+models:
+  - name: int_fighter_bouts__unpivoted
+    description: >
+      One row per fighter per bout: stg_ufcstats__bouts unpivoted so each bout
+      appears once from each corner's point of view. The shared base for
+      fct_fighter_bout and the career-to-date windows. Ephemeral, so it is
+      compiled into those models as a CTE and never lands in the warehouse;
+      its grain is tested on fct_fighter_bout.
+    columns:
+      - name: fighter_url
+        description: The fighter this row is about. With bout_url, the grain.
+      - name: opponent_fighter_url
+        description: The other corner in the same bout.
+      - name: corner
+        description: Which side of the source row this came from, 'a' or 'b'.
+      - name: is_winner
+        description: False for a draw, null for a no contest.
+      - name: result
+        description: >
+          win, loss, draw or no_contest, from this fighter's point of view.
+          no_contest is the site's 'nc'.
+      - name: sig_strikes_absorbed
+        description: The opponent's sig_strikes_landed in the same bout.
+      - name: takedowns_conceded
+        description: The opponent's takedowns_landed in the same bout.
+      - name: event_date
+        description: From stg_ufcstats__events. Orders the career-to-date windows.
+      - name: age_at_bout_years
+        description: >
+          Days between date of birth and the event, divided by 365.25. Null
+          where the fighter has no date of birth on file.
